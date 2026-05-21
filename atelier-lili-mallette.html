@@ -405,9 +405,17 @@
     display:flex;align-items:center;padding:0 10px;
     font-size:11px;font-weight:600;color:#fff;background:#7E2630;
     overflow:hidden;white-space:nowrap;box-shadow:var(--shadow-sm);z-index:2;
+    cursor:grab;user-select:none;
   }
+  .g-bar.dragging{cursor:grabbing;opacity:.92;box-shadow:var(--shadow)}
   .g-bar .gb-fill{position:absolute;left:0;top:0;bottom:0;background:rgba(255,255,255,.16);z-index:0}
-  .g-bar .gb-lbl{position:relative;z-index:1;overflow:hidden;text-overflow:ellipsis}
+  .g-bar .gb-lbl{position:relative;z-index:1;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+  .gb-resize{
+    position:absolute;top:0;bottom:0;width:8px;
+    cursor:ew-resize;z-index:4;background:transparent;
+  }
+  .gb-resize-l{left:0}
+  .gb-resize-r{right:0}
 
   /* ============================================================
      FLUX / SCHEMA
@@ -1534,15 +1542,20 @@ function renderGantt(){
         ${GMONTHS.map(()=>`<div class="gcell"></div>`).join('')}
         ${todIn?`<div class="g-today" style="left:${todPct}%"></div>`:''}
         <div class="g-bar" style="left:${left}%;width:${width}%">
+          <span class="gb-resize gb-resize-l"></span>
           <span class="gb-fill" style="width:${prog}%"></span>
           <span class="gb-lbl">${esc(p.title)}</span>
+          <span class="gb-resize gb-resize-r"></span>
         </div>
       </div>
     </div>`;
   });
   document.getElementById('gantt').innerHTML=h;
   document.querySelectorAll('#gantt .g-row').forEach(r=>{
-    r.addEventListener('click',()=>openProject(r.dataset.id,'gantt'));
+    r.addEventListener('click',()=>{
+      if(_ganttDragMoved){ _ganttDragMoved=false; return; }
+      openProject(r.dataset.id,'gantt');
+    });
   });
 }
 
@@ -1961,6 +1974,62 @@ document.getElementById('menu-toggle').addEventListener('click',()=>{
   document.getElementById('sidebar').classList.toggle('open');
 });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
+
+/* ===== drag & resize des barres du Calendrier ===== */
+let _ganttDrag=null;
+let _ganttDragMoved=false;
+document.addEventListener('mousedown',e=>{
+  const bar=e.target.closest('#gantt .g-bar');
+  if(!bar) return;
+  const row=bar.closest('.g-row[data-id]');
+  if(!row) return;
+  const p=PROJECTS.find(x=>x.id===row.dataset.id);
+  if(!p) return;
+  const track=bar.parentElement;
+  const trackRect=track.getBoundingClientRect();
+  const mode=e.target.classList.contains('gb-resize-l')?'start'
+            :e.target.classList.contains('gb-resize-r')?'end':'move';
+  const NM=GMONTHS.length;
+  const fs0=(function(){const f=date2frac(p.dateStart);return f!=null?f:p.gStart;})();
+  const fe0=(function(){const f=date2frac(p.dateEnd);return f!=null?f:p.gEnd;})();
+  _ganttDrag={ p, bar, mode, trackRect, x0:e.clientX, fs0, fe0, NM };
+  _ganttDragMoved=false;
+  bar.classList.add('dragging');
+  e.preventDefault();
+});
+document.addEventListener('mousemove',e=>{
+  if(!_ganttDrag) return;
+  const d=_ganttDrag;
+  const dx=e.clientX-d.x0;
+  if(Math.abs(dx)>3) _ganttDragMoved=true;
+  const dF=(dx/d.trackRect.width)*d.NM;
+  const minW=0.05;
+  let fs=d.fs0, fe=d.fe0;
+  if(d.mode==='move'){
+    fs=d.fs0+dF; fe=d.fe0+dF;
+    if(fs<0){ fe+=-fs; fs=0; }
+    if(fe>d.NM){ fs-=(fe-d.NM); fe=d.NM; }
+  } else if(d.mode==='start'){
+    fs=Math.min(d.fe0-minW, Math.max(0, d.fs0+dF));
+  } else {
+    fe=Math.max(d.fs0+minW, Math.min(d.NM, d.fe0+dF));
+  }
+  d.p.dateStart=fmtIso(frac2date(fs));
+  d.p.dateEnd=fmtIso(frac2date(fe));
+  const fs2=date2frac(d.p.dateStart), fe2=date2frac(d.p.dateEnd);
+  d.bar.style.left=(fs2/d.NM*100)+'%';
+  d.bar.style.width=Math.max((fe2-fs2)/d.NM*100,5)+'%';
+});
+document.addEventListener('mouseup',()=>{
+  if(!_ganttDrag) return;
+  const d=_ganttDrag;
+  d.bar.classList.remove('dragging');
+  _ganttDrag=null;
+  if(_ganttDragMoved){
+    saveState();
+    renderGantt(); renderDashboard(); renderProjets();
+  }
+});
 
 /* nav project count */
 document.getElementById('nav-count-proj').textContent=
