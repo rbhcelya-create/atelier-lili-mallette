@@ -1228,6 +1228,11 @@ function frac2date(frac){
   const day=Math.max(1,Math.min(dim,Math.round((f-Math.floor(f))*dim)+1));
   return new Date(Y,M0+mi,day);
 }
+function _addDay(iso){
+  const d=new Date(iso+'T00:00:00');
+  d.setDate(d.getDate()+1);
+  return fmtIso(d);
+}
 function date2frac(iso){
   if(!iso) return null;
   const d=new Date(iso+'T00:00:00');
@@ -1505,7 +1510,7 @@ function renderGantt(){
   const today=new Date(); today.setHours(0,0,0,0);
   const tMi=(today.getFullYear()-Y)*12+(today.getMonth()-M0);
   const todIn = tMi>=0 && tMi<NM;
-  const todPct = todIn ? ((tMi + (today.getDate()-1)/GMONTHS[tMi].days)/NM)*100 : 0;
+  const todPct = todIn ? ((tMi + (today.getDate()-0.5)/GMONTHS[tMi].days)/NM)*100 : 0;
 
   const monthsH=GMONTHS.map(m=>`<div class="gm">${m.label}</div>`).join('');
   const daysH=GMONTHS.map((m,mi)=>{
@@ -1528,7 +1533,8 @@ function renderGantt(){
 
   PROJECTS.slice().sort((a,b)=>a.gStart-b.gStart).forEach(p=>{
     const st=styleById(p.style);
-    const fs=date2frac(p.dateStart), fe=date2frac(p.dateEnd);
+    const fs=date2frac(p.dateStart);
+    const fe=p.dateEnd?date2frac(_addDay(p.dateEnd)):null;
     const gs=(fs!=null)?fs:p.gStart, ge=(fe!=null)?fe:p.gEnd;
     const left=(gs/NM)*100;
     const width=Math.max(((ge-gs)/NM)*100,5);
@@ -1991,7 +1997,7 @@ document.addEventListener('mousedown',e=>{
             :e.target.classList.contains('gb-resize-r')?'end':'move';
   const NM=GMONTHS.length;
   const fs0=(function(){const f=date2frac(p.dateStart);return f!=null?f:p.gStart;})();
-  const fe0=(function(){const f=date2frac(p.dateEnd);return f!=null?f:p.gEnd;})();
+  const fe0=(function(){const f=p.dateEnd?date2frac(_addDay(p.dateEnd)):null;return f!=null?f:p.gEnd;})();
   _ganttDrag={ p, bar, mode, trackRect, x0:e.clientX, fs0, fe0, NM };
   _ganttDragMoved=false;
   bar.classList.add('dragging');
@@ -2015,8 +2021,9 @@ document.addEventListener('mousemove',e=>{
     fe=Math.max(d.fs0+minW, Math.min(d.NM, d.fe0+dF));
   }
   d.p.dateStart=fmtIso(frac2date(fs));
-  d.p.dateEnd=fmtIso(frac2date(fe));
-  const fs2=date2frac(d.p.dateStart), fe2=date2frac(d.p.dateEnd);
+  const endBound=frac2date(fe); endBound.setDate(endBound.getDate()-1);
+  d.p.dateEnd=fmtIso(endBound);
+  const fs2=date2frac(d.p.dateStart), fe2=date2frac(_addDay(d.p.dateEnd));
   d.bar.style.left=(fs2/d.NM*100)+'%';
   d.bar.style.width=Math.max((fe2-fs2)/d.NM*100,5)+'%';
 });
