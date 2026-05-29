@@ -441,6 +441,25 @@ h1.title{
 }
 .m-tag.admin{background:var(--accent-soft);color:var(--accent-dark)}
 .m-tag.editeur{background:var(--sage-soft);color:var(--sage)}
+.m-tag.pending{background:var(--gold-soft);color:var(--gold)}
+.member{position:relative}
+.member .m-del{
+  position:absolute;top:9px;right:9px;border:none;background:none;cursor:pointer;
+  color:var(--ink-3);font-size:17px;line-height:1;padding:3px 6px;border-radius:6px;
+}
+.member .m-del:hover{background:var(--surface-2);color:var(--accent)}
+.invite-card{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow-sm);padding:16px;margin-bottom:18px;
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+}
+.invite-card input,.invite-card select{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);
+  padding:9px 12px;font-family:inherit;font-size:14px;color:var(--ink);
+}
+.invite-card input{flex:1 1 180px}
+.invite-card input:focus,.invite-card select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.invite-note{flex-basis:100%;font-size:12px;color:var(--ink-3);font-style:italic;margin-top:2px}
 
 /* ============================================================
    MODAL

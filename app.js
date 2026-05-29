@@ -569,13 +569,65 @@ function renderGantt(){
 function renderTeam(){
   document.getElementById('team-grid').innerHTML = TEAM.map(m=>`
     <div class="member">
+      ${m.pending?`<button class="m-del" data-del-member="${esc(m.id)}" title="Retirer l'invitation">&times;</button>`:''}
       <div class="m-ava" style="background:${m.color}">${initials(m.name)}</div>
       <div>
         <div class="m-name">${esc(m.name)}</div>
         <div class="m-role">${esc(m.role)}</div>
         <span class="m-tag ${m.access}">${m.access==='admin'?'Administrateur':'Éditeur'}</span>
+        ${m.pending?'<span class="m-tag pending">Invitation en attente</span>':''}
       </div>
     </div>`).join('');
+  document.querySelectorAll('#team-grid [data-del-member]').forEach(b=>b.addEventListener('click',()=>{
+    const i=TEAM.findIndex(m=>m.id===b.dataset.delMember);
+    if(i>=0){ TEAM.splice(i,1); saveTeam(); renderTeam(); toast('Invitation retirée'); }
+  }));
+}
+
+/* ===== ÉQUIPE — invitation (simulation, aucun email réel) ===== */
+const LS_TEAM='lili-mallette-team-v1';
+function saveTeam(){
+  try{ localStorage.setItem(LS_TEAM, JSON.stringify(TEAM.filter(m=>m.pending))); }catch(e){}
+}
+function loadTeam(){
+  try{
+    const raw=localStorage.getItem(LS_TEAM);
+    if(!raw) return;
+    const arr=JSON.parse(raw);
+    if(Array.isArray(arr)) arr.forEach(m=>{ if(m&&m.id&&!TEAM.some(x=>x.id===m.id)) TEAM.push(m); });
+  }catch(e){}
+}
+function showInviteForm(){
+  const box=document.getElementById('invite-form');
+  if(!box) return;
+  box.innerHTML=`
+    <div class="invite-card">
+      <input id="inv-name" placeholder="Nom complet">
+      <input id="inv-email" type="email" placeholder="adresse@email.com">
+      <select id="inv-access">
+        <option value="editeur">Éditeur</option>
+        <option value="admin">Administrateur</option>
+      </select>
+      <button class="btn primary sm" id="inv-send">Envoyer l'invitation</button>
+      <button class="btn sm" id="inv-cancel">Annuler</button>
+      <div class="invite-note">Simulation — aucun email réel n'est envoyé. L'envoi sera branché en V1 (backend + service mail).</div>
+    </div>`;
+  document.getElementById('inv-send').addEventListener('click',sendInvite);
+  document.getElementById('inv-cancel').addEventListener('click',()=>{ box.innerHTML=''; });
+  document.getElementById('inv-name').focus();
+}
+function sendInvite(){
+  const name=(document.getElementById('inv-name').value||'').trim();
+  const email=(document.getElementById('inv-email').value||'').trim();
+  const access=document.getElementById('inv-access').value;
+  if(!name){ toast('Indiquez un nom'); return; }
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ toast('Adresse email invalide'); return; }
+  const colors=['#C04A3F','#6E8E63','#2F4259','#C28A2C','#8C8270','#B07560'];
+  TEAM.push({ id:'inv_'+Date.now(), name, role:email, access, color:colors[TEAM.length%colors.length], email, pending:true });
+  saveTeam();
+  document.getElementById('invite-form').innerHTML='';
+  renderTeam();
+  toast('Invitation envoyée à '+email+' (simulation)');
 }
 
 /* ===== PROJECT MODAL ===== */
@@ -1044,5 +1096,7 @@ document.getElementById('nav-count-proj').textContent=
 
 /* init */
 loadState();
+loadTeam();
+(function(){ const b=document.getElementById('invite-btn'); if(b) b.addEventListener('click',showInviteForm); })();
 buildFilterbar();
 renderDashboard();
