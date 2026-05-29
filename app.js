@@ -206,10 +206,10 @@ const DOC_STATS = ['Brouillon','En révision','Validé','Final'];
 
 /* Livrables d'un projet et leurs dossiers de documents */
 const LIVRABLES=[
-  { key:'balado',    label:'Balado',            folders:['Texte','Audio'] },
-  { key:'video',     label:'Vidéo',             folders:['Texte','Image'] },
-  { key:'spectacle', label:'Spectacle',         folders:['Audio','Texte','Image'] },
-  { key:'fiche',     label:'Fiche pédagogique', folders:['Texte','Image'] }
+  { key:'balado',    label:'Balados',             folders:['Texte','Audio'] },
+  { key:'video',     label:'Vidéos',              folders:['Texte','Image'] },
+  { key:'spectacle', label:'Spectacles',          folders:['Audio','Texte','Image'] },
+  { key:'fiche',     label:'Fiches pédagogiques', folders:['Texte','Image'] }
 ];
 const LIV_SVG={
   balado: DELIV_TYPES.balado.svg,
