@@ -370,12 +370,17 @@ function wireCards(scope){
 }
 
 /* ===== DASHBOARD ===== */
+function topQ(){ const s=document.getElementById('search'); return s?s.value.toLowerCase().trim():''; }
 function renderDashboard(){
   renderStats();
-  const list=PROJECTS.filter(p=>p.status!=='publie')
-    .sort((a,b)=>(a.deadline||'').localeCompare(b.deadline||''));
+  const q=topQ();
+  let list=PROJECTS.filter(p=>p.status!=='publie');
+  if(q) list=list.filter(p=>(p.title+' '+p.fileCode).toLowerCase().includes(q));
+  list.sort((a,b)=>(a.deadline||'').localeCompare(b.deadline||''));
   const grid=document.getElementById('dash-grid');
-  grid.innerHTML=list.map(projectCard).join('');
+  grid.innerHTML=list.map(projectCard).join('')||`<div class="placeholder" style="grid-column:1/-1">
+    <div class="ph-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+    <h2>Aucun projet</h2><p>Aucun projet actif ne correspond à cette recherche.</p></div>`;
   wireCards(grid);
 }
 
@@ -522,8 +527,10 @@ function renderGantt(){
     return `<div class="gmo">${cells}</div>`;
   }).join('');
 
+  const gq=topQ();
+  const grows=PROJECTS.slice().filter(p=>!gq||p.title.toLowerCase().includes(gq)).sort((a,b)=>a.gStart-b.gStart);
   let h=`<div class="g-head">
-    <div class="gh-l">Production · ${PROJECTS.length} projet${PROJECTS.length>1?'s':''}</div>
+    <div class="gh-l">Production · ${grows.length} projet${grows.length>1?'s':''}</div>
     <div class="g-months">${monthsH}</div>
   </div>
   <div class="g-head g-dayhead">
@@ -531,7 +538,7 @@ function renderGantt(){
     <div class="g-days">${daysH}</div>
   </div>`;
 
-  PROJECTS.slice().sort((a,b)=>a.gStart-b.gStart).forEach(p=>{
+  grows.forEach(p=>{
     const st=styleById(p.style);
     const fs=date2frac(p.dateStart);
     const fe=p.dateEnd?date2frac(_addDay(p.dateEnd)):null;
@@ -567,7 +574,9 @@ function renderGantt(){
 
 /* ===== TEAM ===== */
 function renderTeam(){
-  document.getElementById('team-grid').innerHTML = TEAM.map(m=>`
+  const q=topQ();
+  const list=q?TEAM.filter(m=>(m.name+' '+m.role+' '+(m.email||'')).toLowerCase().includes(q)):TEAM;
+  document.getElementById('team-grid').innerHTML = list.map(m=>`
     <div class="member">
       ${m.pending?`<button class="m-del" data-del-member="${esc(m.id)}" title="Retirer l'invitation">&times;</button>`:''}
       <div class="m-ava" style="background:${m.color}">${initials(m.name)}</div>
@@ -999,6 +1008,7 @@ function renderDocs(){
 
 /* ===== NAV ===== */
 const VIEW_NAMES={dashboard:'Tableau de bord',projets:'Projets',docs:'Documents',gantt:'Calendrier',equipe:'Équipe'};
+const SEARCH_PLACEHOLDER={dashboard:'Rechercher un projet…',projets:'Rechercher un projet…',docs:'Rechercher un document…',gantt:'Rechercher un projet…',equipe:'Rechercher un membre…'};
 function switchView(v){
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
@@ -1006,6 +1016,8 @@ function switchView(v){
   document.getElementById('crumb-current').textContent=VIEW_NAMES[v]||'';
   document.getElementById('sidebar').classList.remove('open');
   window.scrollTo({top:0,behavior:'smooth'});
+  const _s=document.getElementById('search');
+  if(_s){ _s.value=''; _s.placeholder=SEARCH_PLACEHOLDER[v]||'Rechercher…'; }
   if(v==='dashboard') renderDashboard();
   if(v==='projets'){ currentParent=null; renderProjets(); }
   if(v==='docs') renderDocs();
@@ -1023,8 +1035,11 @@ document.querySelectorAll('.nav-item').forEach(b=>{
 /* search */
 document.getElementById('search').addEventListener('input',()=>{
   const v=document.querySelector('.nav-item.active')?.dataset.view;
-  if(v!=='projets'){ switchView('projets'); }
-  else renderProjets();
+  if(v==='dashboard') renderDashboard();
+  else if(v==='projets') renderProjets();
+  else if(v==='gantt') renderGantt();
+  else if(v==='equipe') renderTeam();
+  else if(v==='docs'){ const dq=document.getElementById('ds-q'); if(dq){ dq.value=document.getElementById('search').value; dsRender(); } }
 });
 
 /* mobile menu */
