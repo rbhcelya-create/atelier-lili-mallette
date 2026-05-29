@@ -450,16 +450,27 @@ function renderProjets(){
   if(q){
     fb.style.display='none'; bar.innerHTML='';
     document.getElementById('crumb-current').textContent='Projets › Recherche';
-    if(sub) sub.textContent=`Résultats pour « ${q} » dans tous les projets.`;
+    if(sub) sub.textContent=`Résultats pour « ${q} » — catégories et projets.`;
+    const parents=Object.keys(DELIV_TYPES).filter(k=>(DELIV_TYPES[k].label+'s').toLowerCase().includes(q));
     const list=PROJECTS.filter(p=>p.title.toLowerCase().includes(q)||p.fileCode.toLowerCase().includes(q))
       .sort((a,b)=>(a.deadline||'').localeCompare(b.deadline||''));
-    if(list.length===0){
+    if(!parents.length && !list.length){
       grid.innerHTML=`<div class="placeholder" style="grid-column:1/-1">
         <div class="ph-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
-        <h2>Aucun résultat</h2><p>Aucun projet ne correspond à cette recherche.</p></div>`;
+        <h2>Aucun résultat</h2><p>Aucune catégorie ni projet ne correspond à cette recherche.</p></div>`;
       return;
     }
-    grid.innerHTML=list.map(projectCard).join(''); wireCards(grid);
+    grid.innerHTML=parents.map(renderParentCard).join('')+list.map(projectCard).join('');
+    grid.querySelectorAll('.parent-card[data-parent]').forEach(c=>{
+      c.addEventListener('click',()=>{
+        currentParent=c.dataset.parent;
+        fStage='tous'; buildFilterbar();
+        document.getElementById('search').value='';
+        renderProjets();
+        window.scrollTo({top:0,behavior:'smooth'});
+      });
+    });
+    wireCards(grid);
     return;
   }
 
