@@ -385,7 +385,7 @@ function renderDashboard(){
 }
 
 /* ===== PROJETS (filterable) ===== */
-let fStage='tous', currentParent=null;
+let fStage='tous';
 function buildFilterbar(){
   const counts={};
   ['idee','prod','livr','publie'].forEach(s=>counts[s]=PROJECTS.filter(p=>p.status===s).length);
@@ -409,101 +409,20 @@ function buildFilterbar(){
     });
   });
 }
-function renderParentCard(key){
-  const t=DELIV_TYPES[key];
-  const subs=PROJECTS.filter(p=>(p.deliverables||[]).some(d=>d.type===key));
-  let sum=0,pub=0,wip=0;
-  subs.forEach(p=>{
-    const d=(p.deliverables||[]).find(x=>x.type===key);
-    if(!d) return;
-    sum+=d.prog||0;
-    if(d.state==='on') pub++; else if(d.state==='wip') wip++;
-  });
-  const avg=subs.length?Math.round(sum/subs.length):0;
-  return `<article class="proj-card parent-card" data-parent="${esc(key)}">
-    <div class="pc-head">
-      <div class="pc-top">
-        <span class="pc-style"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">${t.svg}</svg> Projet · livrable</span>
-        <span class="badge prod">${subs.length} sous-projet${subs.length>1?'s':''}</span>
-      </div>
-      <h3>${esc(t.label)}s</h3>
-      <div class="pc-file">${pub} publié${pub>1?'s':''} · ${wip} en cours</div>
-    </div>
-    <div class="pc-body">
-      <div class="pc-meta"><span class="pc-deadline">Avancement moyen</span><strong style="font-size:13.5px">${avg}%</strong></div>
-      <div class="progress"><span style="width:${avg}%"></span></div>
-    </div>
-    <div class="pc-foot">
-      <span class="pf-item">Ouvrir les ${subs.length} projet${subs.length>1?'s':''} →</span>
-    </div>
-  </article>`;
-}
-
 function renderProjets(){
   const grid=document.getElementById('proj-grid');
   const fb=document.getElementById('filterbar');
   const bar=document.getElementById('proj-back-bar');
   const sub=document.querySelector('#view-projets .subtitle');
-  const q=(document.getElementById('search').value||'').toLowerCase().trim();
-
-  /* Recherche : liste à plat de toutes les histoires */
-  if(q){
-    fb.style.display='none'; bar.innerHTML='';
-    document.getElementById('crumb-current').textContent='Projets › Recherche';
-    if(sub) sub.textContent=`Résultats pour « ${q} » — catégories et projets.`;
-    const parents=Object.keys(DELIV_TYPES).filter(k=>(DELIV_TYPES[k].label+'s').toLowerCase().includes(q));
-    const list=PROJECTS.filter(p=>p.title.toLowerCase().includes(q)||p.fileCode.toLowerCase().includes(q))
-      .sort((a,b)=>(a.deadline||'').localeCompare(b.deadline||''));
-    if(!parents.length && !list.length){
-      grid.innerHTML=`<div class="placeholder" style="grid-column:1/-1">
-        <div class="ph-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
-        <h2>Aucun résultat</h2><p>Aucune catégorie ni projet ne correspond à cette recherche.</p></div>`;
-      return;
-    }
-    grid.innerHTML=parents.map(renderParentCard).join('')+list.map(projectCard).join('');
-    grid.querySelectorAll('.parent-card[data-parent]').forEach(c=>{
-      c.addEventListener('click',()=>{
-        currentParent=c.dataset.parent;
-        fStage='tous'; buildFilterbar();
-        document.getElementById('search').value='';
-        renderProjets();
-        window.scrollTo({top:0,behavior:'smooth'});
-      });
-    });
-    wireCards(grid);
-    return;
-  }
-
-  /* Niveau 1 : projets parents (par type de livrable) */
-  if(!currentParent){
-    fb.style.display='none'; bar.innerHTML='';
-    document.getElementById('crumb-current').textContent='Projets';
-    if(sub) sub.textContent='Projets regroupés par type de livrable — cliquez pour voir les projets.';
-    grid.innerHTML=Object.keys(DELIV_TYPES).map(renderParentCard).join('');
-    grid.querySelectorAll('.parent-card[data-parent]').forEach(c=>{
-      c.addEventListener('click',()=>{
-        currentParent=c.dataset.parent;
-        fStage='tous'; buildFilterbar();
-        renderProjets();
-        window.scrollTo({top:0,behavior:'smooth'});
-      });
-    });
-    return;
-  }
-
-  /* Niveau 2 : sous-projets (histoires) du parent */
-  const t=DELIV_TYPES[currentParent];
-  fb.style.display='';
-  document.getElementById('crumb-current').textContent=`Projets › ${t.label}s`;
-  if(sub) sub.textContent=`Projets avec un livrable « ${t.label} » — cliquez pour le détail.`;
-  bar.innerHTML=`<button class="btn sm" id="proj-back">← Tous les projets</button>`;
-  document.getElementById('proj-back').addEventListener('click',()=>{
-    currentParent=null; renderProjets(); window.scrollTo({top:0,behavior:'smooth'});
-  });
-  let list=PROJECTS.filter(p=>(p.deliverables||[]).some(d=>d.type===currentParent));
+  const q=topQ();
+  fb.style.display=''; bar.innerHTML='';
+  document.getElementById('crumb-current').textContent = q?'Projets › Recherche':'Projets';
+  if(sub) sub.textContent = q?`Résultats pour « ${q} ».`:'Tous les projets de production.';
+  let list=PROJECTS.slice();
   if(fStage!=='tous') list=list.filter(p=>p.status===fStage);
+  if(q) list=list.filter(p=>(p.title+' '+p.fileCode).toLowerCase().includes(q));
   list.sort((a,b)=>(a.deadline||'').localeCompare(b.deadline||''));
-  if(list.length===0){
+  if(!list.length){
     grid.innerHTML=`<div class="placeholder" style="grid-column:1/-1">
       <div class="ph-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
       <h2>Aucun projet</h2><p>Aucun projet ne correspond à ces filtres.</p></div>`;
@@ -1051,7 +970,7 @@ function switchView(v){
   const _s=document.getElementById('search');
   if(_s){ _s.value=''; _s.placeholder=SEARCH_PLACEHOLDER[v]||'Rechercher…'; }
   if(v==='dashboard') renderDashboard();
-  if(v==='projets'){ currentParent=null; renderProjets(); }
+  if(v==='projets') renderProjets();
   if(v==='docs') renderDocs();
   if(v==='gantt') renderGantt();
   if(v==='equipe') renderTeam();
@@ -1138,8 +1057,7 @@ document.addEventListener('mouseup',()=>{
 });
 
 /* nav project count */
-document.getElementById('nav-count-proj').textContent=
-  Object.keys(DELIV_TYPES).filter(k=>PROJECTS.some(p=>(p.deliverables||[]).some(d=>d.type===k))).length;
+document.getElementById('nav-count-proj').textContent=PROJECTS.length;
 
 /* init */
 loadState();
