@@ -348,7 +348,7 @@ h1.title{
   border-radius:var(--radius);box-shadow:var(--shadow-sm);
 }
 .gantt-scroll{overflow-x:auto;border-radius:var(--radius)}
-.gantt{min-width:1200px}
+.gantt{min-width:2400px}
 .g-head{
   display:grid;grid-template-columns:240px 1fr;
   border-bottom:1px solid var(--line);background:var(--surface-2);
@@ -370,8 +370,8 @@ h1.title{
 .g-days .gmo{flex:1;display:flex;border-right:1px solid var(--line)}
 .g-days .gmo:last-child{border-right:none}
 .g-days .gd{
-  flex:1;text-align:center;font-size:8.5px;color:var(--ink-3);
-  padding:4px 0;border-right:1px solid var(--line-soft);
+  flex:1;text-align:center;font-size:10.5px;color:var(--ink-3);
+  padding:5px 0;border-right:1px solid var(--line-soft);
 }
 .g-days .gd:last-child{border-right:none}
 .g-days .gd.tod{background:var(--accent);color:#fff;font-weight:700}
