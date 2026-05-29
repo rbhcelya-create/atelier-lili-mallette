@@ -7,7 +7,7 @@
 const TEAM = [
   { id:'lise',  name:'Lise Martin',         role:'Créatrice & narratrice',        access:'admin',   color:'#C04A3F' },
   { id:'fred',  name:'Frédérick Rouleau',   role:'Univers visuel',                access:'editeur', color:'#6E8E63' },
-  { id:'bruno', name:'Bruno Lefebvre',      role:'Réalisation sonore & musicale', access:'editeur', color:'#2F4259' },
+  { id:'bruno', name:'Bruno Lefebvre',      role:'Réalisation sonore & musicale', access:'admin',   color:'#2F4259' },
   { id:'anne',  name:'Anne Kishnapanaïdou', role:'Coordonnatrice',                access:'admin',   color:'#C28A2C' },
   { id:'line',  name:'Line Charlebois',     role:'Fiche pédagogique',             access:'editeur', color:'#8C8270' },
   { id:'ana',   name:'Ana de Rosario',      role:'Marketing & réseaux sociaux',   access:'editeur', color:'#B07560' }
