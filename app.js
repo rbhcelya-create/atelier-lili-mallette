@@ -794,6 +794,20 @@ function renderFoldersPanel(p){
   if(modalQuery){
     let html='<div class="modal-section-title">Documents</div>';
     let any=false;
+    /* Dossiers dont le NOM correspond → lignes cliquables */
+    const nameMatches=folders.filter(f=>mqHit(f.name));
+    if(nameMatches.length){
+      any=true;
+      html+=nameMatches.map(f=>{
+        const n=folderLinks(p,f.key).length;
+        return `<div class="fold" data-fk="${esc(f.key)}">
+          <div class="fold-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+          <div class="fold-n">${esc(f.name)}${f.fixed?'':'<span class="ftag">perso</span>'}</div>
+          <span class="fold-c">${n} lien${n>1?'s':''}</span>
+        </div>`;
+      }).join('');
+    }
+    /* Liens dont le contenu correspond → groupés par dossier */
     folders.forEach(f=>{
       const matched=folderLinks(p,f.key).map((l,i)=>({l,i})).filter(({l})=>mqHit(linkHay(l,f.name)));
       if(!matched.length) return;
@@ -801,7 +815,14 @@ function renderFoldersPanel(p){
       html+=`<div class="fold-search-head">${esc(f.name)}</div>`;
       html+=matched.map(({l,i})=>linkRow(f.key,l,i)).join('');
     });
-    panel.innerHTML = html + (any?'' : `<div class="empty-note">Aucun fichier ne correspond à « ${esc(modalQuery)} ».</div>`);
+    panel.innerHTML = html + (any?'' : `<div class="empty-note">Aucun dossier ni document ne correspond à « ${esc(modalQuery)} ».</div>`);
+    panel.querySelectorAll('.fold[data-fk]').forEach(el=>el.addEventListener('click',()=>{
+      modalQuery='';
+      const ms=document.getElementById('m-search');
+      if(ms){ ms.value=''; ms.parentElement.classList.remove('has-q'); }
+      currentFolder=el.dataset.fk;
+      renderModalPanels(p);
+    }));
     wireLinkRows(panel,p);
     return;
   }
