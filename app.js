@@ -919,15 +919,41 @@ function renderKanban(){
   const today=new Date(); today.setHours(0,0,0,0);
   document.getElementById('kanban').innerHTML=KANBAN_STATUSES.map(col=>{
     const cards=list.filter(t=>t.status===col.key);
-    return `<div class="kanban-col">
+    return `<div class="kanban-col" data-status="${esc(col.key)}">
       <div class="k-col-head ${col.cls}">${col.label} <span class="k-col-count">${cards.length}</span></div>
       <div class="k-col-body">${cards.map(t=>renderTaskCard(t,today)).join('')||'<div class="empty-note">Vide</div>'}</div>
     </div>`;
   }).join('');
-  document.querySelectorAll('#kanban .k-card[data-id]').forEach(c=>c.addEventListener('click',ev=>{
-    if(ev.target.closest('.k-card-link')) return;
-    openTaskForm(c.dataset.id);
-  }));
+  document.querySelectorAll('#kanban .k-card[data-id]').forEach(c=>{
+    c.addEventListener('click',ev=>{
+      if(ev.target.closest('.k-card-link')) return;
+      openTaskForm(c.dataset.id);
+    });
+    c.setAttribute('draggable','true');
+    c.addEventListener('dragstart',e=>{
+      e.dataTransfer.setData('text/plain',c.dataset.id);
+      e.dataTransfer.effectAllowed='move';
+      c.classList.add('dragging');
+    });
+    c.addEventListener('dragend',()=>c.classList.remove('dragging'));
+  });
+  document.querySelectorAll('#kanban .kanban-col[data-status]').forEach(col=>{
+    col.addEventListener('dragover',e=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; col.classList.add('drag-over'); });
+    col.addEventListener('dragleave',e=>{ if(!col.contains(e.relatedTarget)) col.classList.remove('drag-over'); });
+    col.addEventListener('drop',e=>{
+      e.preventDefault();
+      col.classList.remove('drag-over');
+      const id=e.dataTransfer.getData('text/plain');
+      const newStatus=col.dataset.status;
+      if(!id||!newStatus) return;
+      const t=TASKS.find(x=>x.id===id);
+      if(!t||t.status===newStatus) return;
+      t.status=newStatus;
+      saveTasks();
+      renderKanban();
+      toast('Tâche déplacée vers '+(KANBAN_STATUSES.find(s=>s.key===newStatus)||{}).label);
+    });
+  });
 }
 function renderTaskCard(t,today){
   const L=LIVRABLES.find(x=>x.key===t.category);
