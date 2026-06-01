@@ -263,7 +263,8 @@ function saveState(){
       comments:p.comments||[],
       dateStart:p.dateStart||null,
       dateEnd:p.dateEnd||null,
-      deadline:p.deadline||null
+      deadline:p.deadline||null,
+      livDates:p.livDates||{}
     }; });
     localStorage.setItem(LS_KEY,JSON.stringify(data));
   }catch(e){}
@@ -281,6 +282,7 @@ function loadState(){
       if(typeof s.dateStart==='string') p.dateStart=s.dateStart;
       if(typeof s.dateEnd==='string') p.dateEnd=s.dateEnd;
       if(typeof s.deadline==='string') p.deadline=s.deadline;
+      if(s.livDates&&typeof s.livDates==='object') p.livDates=s.livDates;
     });
   }catch(e){}
 }
@@ -474,13 +476,9 @@ function renderGantt(){
 
   grows.forEach(p=>{
     const st=styleById(p.style);
-    const fs=date2frac(p.dateStart);
-    const fe=p.dateEnd?date2frac(_addDay(p.dateEnd)):null;
-    const gs=(fs!=null)?fs:p.gStart, ge=(fe!=null)?fe:p.gEnd;
-    const left=(gs/NM)*100;
-    const width=Math.max(((ge-gs)/NM)*100,5);
-    const prog=stageProgress(p);
-    h+=`<div class="g-row" data-id="${p.id}">
+    p.livDates=p.livDates||{};
+    /* En-tête de groupe : titre du projet (cliquable, sans barre) */
+    h+=`<div class="g-row g-row-group" data-id="${p.id}">
       <div class="gr-l">
         <div class="grl-t">${esc(p.title)}</div>
         <div class="grl-s"><span class="dot" style="background:${st.color}"></span>${esc(STATUS[p.status].label)}</div>
@@ -488,27 +486,27 @@ function renderGantt(){
       <div class="g-track">
         ${GMONTHS.map(()=>`<div class="gcell"></div>`).join('')}
         ${todIn?`<div class="g-today" style="left:${todPct}%"></div>`:''}
-        <div class="g-bar" style="left:${left}%;width:${width}%">
-          <span class="gb-resize gb-resize-l"></span>
-          <span class="gb-fill" style="width:${prog}%"></span>
-          <span class="gb-lbl">${esc(p.title)}</span>
-          <span class="gb-resize gb-resize-r"></span>
-        </div>
       </div>
     </div>`;
-    /* Sous-lignes : une par livrable, montrant les tâches du Kanban */
+    /* 4 sous-rangées : une barre par livrable (Balado, Vidéo, Spectacle, Fiche) */
     LIVRABLES.forEach(L=>{
-      const tasks=(typeof TASKS!=='undefined'?TASKS:[]).filter(t=>t.projectId===p.id&&t.category===L.key&&t.deadline);
-      h+=`<div class="g-row g-row-sub">
+      const ld=p.livDates[L.key]||{};
+      const startIso=ld.start||p.dateStart||fmtIso(frac2date(p.gStart));
+      const endIso=ld.end||p.dateEnd||fmtIso(frac2date(p.gEnd));
+      const fs=date2frac(startIso);
+      const fe=date2frac(_addDay(endIso));
+      const left=(fs/NM)*100;
+      const width=Math.max(((fe-fs)/NM)*100,5);
+      h+=`<div class="g-row g-row-sub" data-pid="${esc(p.id)}" data-lk="${esc(L.key)}">
         <div class="gr-l gr-l-sub"><div class="grl-t-sub">${esc(L.label)}</div></div>
         <div class="g-track">
           ${GMONTHS.map(()=>`<div class="gcell"></div>`).join('')}
           ${todIn?`<div class="g-today" style="left:${todPct}%"></div>`:''}
-          ${tasks.map(t=>{
-            const f=date2frac(t.deadline); if(f==null) return '';
-            const pct=(f/NM)*100;
-            return `<div class="g-tk gtk-${esc(t.status)}" data-tid="${esc(t.id)}" style="left:${pct}%" title="${esc(t.title)} — ${esc(fmtDate(t.deadline))}">${esc(t.title)}</div>`;
-          }).join('')}
+          <div class="g-bar" data-pid="${esc(p.id)}" data-lk="${esc(L.key)}" style="left:${left}%;width:${width}%">
+            <span class="gb-resize gb-resize-l"></span>
+            <span class="gb-lbl">${esc(L.label)}</span>
+            <span class="gb-resize gb-resize-r"></span>
+          </div>
         </div>
       </div>`;
     });
@@ -517,15 +515,13 @@ function renderGantt(){
   document.querySelectorAll('#gantt .g-row[data-id]').forEach(r=>{
     r.addEventListener('click',()=>{
       if(_ganttDragMoved){ _ganttDragMoved=false; return; }
-      openProject(r.dataset.id,'gantt');
+      openProject(r.dataset.id);
     });
   });
-  document.querySelectorAll('#gantt .g-tk[data-tid]').forEach(tk=>{
-    tk.addEventListener('click',e=>{
-      e.stopPropagation();
-      const tid=tk.dataset.tid;
-      switchView('kanban');
-      openTaskForm(tid);
+  document.querySelectorAll('#gantt .g-row[data-pid][data-lk]').forEach(r=>{
+    r.addEventListener('click',()=>{
+      if(_ganttDragMoved){ _ganttDragMoved=false; return; }
+      openProject(r.dataset.pid,null,r.dataset.lk);
     });
   });
 }
@@ -603,7 +599,7 @@ let modalQuery='';
 let currentLivrable=null;
 let currentDocFolder=null;
 const mqHit = txt => !modalQuery || String(txt||'').toLowerCase().includes(modalQuery);
-function openProject(id, source){
+function openProject(id, source, initLiv){
   const p=PROJECTS.find(x=>x.id===id);
   if(!p) return;
   currentId=id;
@@ -636,7 +632,7 @@ function openProject(id, source){
   }
 
   /* recherche locale + panneaux */
-  modalQuery=''; currentLivrable=null; currentDocFolder=null;
+  modalQuery=''; currentLivrable=initLiv||null; currentDocFolder=null;
   const ms=document.getElementById('m-search');
   if(ms){ ms.value=''; ms.parentElement.classList.remove('has-q'); }
   renderModalPanels(p);
@@ -751,17 +747,35 @@ function renderModalMain(p){
     return;
   }
 
-  /* Détail d'un livrable : ses dossiers */
+  /* Détail d'un livrable : période + ses dossiers */
   if(currentLivrable){
     const L=LIVRABLES.find(x=>x.key===currentLivrable);
     if(!L){ currentLivrable=null; return renderModalMain(p); }
+    p.livDates=p.livDates||{};
+    const ld=p.livDates[L.key]||{};
     panel.innerHTML=`
       <button class="btn sm" id="m-back" style="margin-bottom:14px">← Livrables</button>
       <div class="modal-section-title">${esc(L.label)}</div>
-      <p style="font-size:13px;color:var(--ink-3);margin-bottom:14px">Dossiers de documents de ce livrable.</p>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;padding:10px 12px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-sm)">
+        <label class="md-field">Début <input type="date" id="lv-start" value="${esc(ld.start||'')}"></label>
+        <label class="md-field">Fin <input type="date" id="lv-end" value="${esc(ld.end||'')}"></label>
+        <span style="font-size:11.5px;color:var(--ink-3);align-self:center">Dates spécifiques à ce livrable (utilisées sur le Calendrier).</span>
+      </div>
+      <div class="modal-section-title" style="font-size:14px;margin-top:6px">Dossiers de documents</div>
       ${L.folders.map(fname=>{ const n=folderLinks(p,L.key,fname).length; return foldRow(L.key,fname,fname,n+' lien'+(n>1?'s':'')); }).join('')}`;
     document.getElementById('m-back').addEventListener('click',()=>{ currentLivrable=null; renderModalMain(p); });
     wireFoldRows(panel,p);
+    const wireLv=(id,k)=>{
+      const el=document.getElementById(id); if(!el) return;
+      el.addEventListener('change',()=>{
+        p.livDates=p.livDates||{}; p.livDates[L.key]=p.livDates[L.key]||{};
+        p.livDates[L.key][k]=el.value||undefined;
+        saveState();
+        renderGantt(); renderDashboard(); renderProjets();
+      });
+    };
+    wireLv('lv-start','start');
+    wireLv('lv-end','end');
     return;
   }
 
@@ -1099,18 +1113,22 @@ let _ganttDragMoved=false;
 document.addEventListener('mousedown',e=>{
   const bar=e.target.closest('#gantt .g-bar');
   if(!bar) return;
-  const row=bar.closest('.g-row[data-id]');
-  if(!row) return;
-  const p=PROJECTS.find(x=>x.id===row.dataset.id);
+  const pid=bar.dataset.pid, lk=bar.dataset.lk;
+  if(!pid||!lk) return;
+  const p=PROJECTS.find(x=>x.id===pid);
   if(!p) return;
+  p.livDates=p.livDates||{};
   const track=bar.parentElement;
   const trackRect=track.getBoundingClientRect();
   const mode=e.target.classList.contains('gb-resize-l')?'start'
             :e.target.classList.contains('gb-resize-r')?'end':'move';
   const NM=GMONTHS.length;
-  const fs0=(function(){const f=date2frac(p.dateStart);return f!=null?f:p.gStart;})();
-  const fe0=(function(){const f=p.dateEnd?date2frac(_addDay(p.dateEnd)):null;return f!=null?f:p.gEnd;})();
-  _ganttDrag={ p, bar, mode, trackRect, x0:e.clientX, fs0, fe0, NM };
+  const ld=p.livDates[lk]||{};
+  const startIso=ld.start||p.dateStart||fmtIso(frac2date(p.gStart));
+  const endIso=ld.end||p.dateEnd||fmtIso(frac2date(p.gEnd));
+  const fs0=date2frac(startIso);
+  const fe0=date2frac(_addDay(endIso));
+  _ganttDrag={ p, lk, bar, mode, trackRect, x0:e.clientX, fs0, fe0, NM };
   _ganttDragMoved=false;
   bar.classList.add('dragging');
   e.preventDefault();
@@ -1132,10 +1150,13 @@ document.addEventListener('mousemove',e=>{
   } else {
     fe=Math.max(d.fs0+minW, Math.min(d.NM, d.fe0+dF));
   }
-  d.p.dateStart=fmtIso(frac2date(fs));
+  d.p.livDates=d.p.livDates||{};
+  d.p.livDates[d.lk]=d.p.livDates[d.lk]||{};
+  d.p.livDates[d.lk].start=fmtIso(frac2date(fs));
   const endBound=frac2date(fe); endBound.setDate(endBound.getDate()-1);
-  d.p.dateEnd=fmtIso(endBound);
-  const fs2=date2frac(d.p.dateStart), fe2=date2frac(_addDay(d.p.dateEnd));
+  d.p.livDates[d.lk].end=fmtIso(endBound);
+  const fs2=date2frac(d.p.livDates[d.lk].start);
+  const fe2=date2frac(_addDay(d.p.livDates[d.lk].end));
   d.bar.style.left=(fs2/d.NM*100)+'%';
   d.bar.style.width=Math.max((fe2-fs2)/d.NM*100,5)+'%';
 });
