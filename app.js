@@ -498,7 +498,7 @@ function renderGantt(){
       const left=(fs/NM)*100;
       const width=Math.max(((fe-fs)/NM)*100,5);
       h+=`<div class="g-row g-row-sub" data-pid="${esc(p.id)}" data-lk="${esc(L.key)}">
-        <div class="gr-l gr-l-sub"><div class="grl-t-sub">${esc(L.label)}</div></div>
+        <div class="gr-l gr-l-sub"></div>
         <div class="g-track">
           ${GMONTHS.map(()=>`<div class="gcell"></div>`).join('')}
           ${todIn?`<div class="g-today" style="left:${todPct}%"></div>`:''}
