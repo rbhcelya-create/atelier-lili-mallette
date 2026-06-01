@@ -407,6 +407,27 @@ h1.title{
 .gb-resize-l{left:0}
 .gb-resize-r{right:0}
 
+/* Sous-lignes Gantt (par livrable, tâches du Kanban) */
+.g-row-sub{background:var(--surface-2);cursor:default}
+.g-row-sub:hover{background:var(--surface-2)}
+.gr-l-sub{padding:6px 16px 6px 32px;border-right:1px solid var(--line);min-width:0;display:flex;align-items:center}
+.grl-t-sub{font-size:11.5px;color:var(--ink-3);font-weight:600;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.g-row-sub .g-track{padding:6px 0;min-height:30px}
+.g-tk{
+  position:absolute;height:18px;top:6px;
+  border-radius:4px;padding:0 8px;
+  font-size:10.5px;font-weight:600;color:#fff;
+  display:flex;align-items:center;
+  transform:translateX(-50%);
+  max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  box-shadow:var(--shadow-sm);z-index:2;cursor:pointer;
+}
+.g-tk:hover{box-shadow:var(--shadow);z-index:3;opacity:.95}
+.g-tk.gtk-todo{background:#8C8270}
+.g-tk.gtk-doing{background:var(--gold)}
+.g-tk.gtk-done{background:var(--sage)}
+.g-tk.gtk-deposited{background:var(--accent-dark)}
+
 /* ============================================================
    FLUX / SCHEMA
    ============================================================ */

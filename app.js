@@ -496,12 +496,36 @@ function renderGantt(){
         </div>
       </div>
     </div>`;
+    /* Sous-lignes : une par livrable, montrant les tâches du Kanban */
+    LIVRABLES.forEach(L=>{
+      const tasks=(typeof TASKS!=='undefined'?TASKS:[]).filter(t=>t.projectId===p.id&&t.category===L.key&&t.deadline);
+      h+=`<div class="g-row g-row-sub">
+        <div class="gr-l gr-l-sub"><div class="grl-t-sub">${esc(L.label)}</div></div>
+        <div class="g-track">
+          ${GMONTHS.map(()=>`<div class="gcell"></div>`).join('')}
+          ${todIn?`<div class="g-today" style="left:${todPct}%"></div>`:''}
+          ${tasks.map(t=>{
+            const f=date2frac(t.deadline); if(f==null) return '';
+            const pct=(f/NM)*100;
+            return `<div class="g-tk gtk-${esc(t.status)}" data-tid="${esc(t.id)}" style="left:${pct}%" title="${esc(t.title)} — ${esc(fmtDate(t.deadline))}">${esc(t.title)}</div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    });
   });
   document.getElementById('gantt').innerHTML=h;
-  document.querySelectorAll('#gantt .g-row').forEach(r=>{
+  document.querySelectorAll('#gantt .g-row[data-id]').forEach(r=>{
     r.addEventListener('click',()=>{
       if(_ganttDragMoved){ _ganttDragMoved=false; return; }
       openProject(r.dataset.id,'gantt');
+    });
+  });
+  document.querySelectorAll('#gantt .g-tk[data-tid]').forEach(tk=>{
+    tk.addEventListener('click',e=>{
+      e.stopPropagation();
+      const tid=tk.dataset.tid;
+      switchView('kanban');
+      openTaskForm(tid);
     });
   });
 }
