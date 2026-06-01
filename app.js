@@ -873,9 +873,135 @@ function renderDocs(){
   dsRender();
 }
 
+/* ===== KANBAN ===== */
+const KANBAN_STATUSES=[
+  { key:'todo',      label:'À faire',  cls:'k-todo' },
+  { key:'doing',     label:'En cours', cls:'k-doing' },
+  { key:'done',      label:'Terminé',  cls:'k-done' },
+  { key:'deposited', label:'Déposé',   cls:'k-deposited' }
+];
+const LS_TASKS='lili-mallette-tasks-v1';
+let TASKS=[];
+let kCat='tous';
+function saveTasks(){ try{ localStorage.setItem(LS_TASKS, JSON.stringify(TASKS)); }catch(e){} }
+function loadTasks(){
+  try{
+    const raw=localStorage.getItem(LS_TASKS);
+    if(!raw) return;
+    const arr=JSON.parse(raw);
+    if(Array.isArray(arr)) TASKS=arr;
+  }catch(e){}
+}
+function renderKanban(){
+  const q=topQ();
+  /* Filterbar (catégorie) */
+  const counts={tous:TASKS.length};
+  LIVRABLES.forEach(L=>{ counts[L.key]=TASKS.filter(t=>t.category===L.key).length; });
+  const fb=document.getElementById('k-filterbar');
+  if(fb){
+    fb.innerHTML=`<button class="chip ${kCat==='tous'?'active':''}" data-kcat="tous">Toutes ${TASKS.length?`<span class="c-count">${TASKS.length}</span>`:''}</button>`+
+      LIVRABLES.map(L=>`<button class="chip ${kCat===L.key?'active':''}" data-kcat="${esc(L.key)}">${esc(L.label)} <span class="c-count">${counts[L.key]||0}</span></button>`).join('');
+    fb.querySelectorAll('.chip[data-kcat]').forEach(ch=>ch.addEventListener('click',()=>{ kCat=ch.dataset.kcat; renderKanban(); }));
+  }
+  /* Tâches filtrées */
+  let list=TASKS.slice();
+  if(kCat!=='tous') list=list.filter(t=>t.category===kCat);
+  if(q){
+    list=list.filter(t=>{
+      const m=t.assignee?memberById(t.assignee):null;
+      const L=LIVRABLES.find(x=>x.key===t.category);
+      const hay=(t.title||'')+' '+(t.jalon||'')+' '+(L?L.label:'')+' '+(m?m.name:'');
+      return hay.toLowerCase().includes(q);
+    });
+  }
+  list.sort((a,b)=>(a.deadline||'').localeCompare(b.deadline||''));
+  /* Colonnes */
+  const today=new Date(); today.setHours(0,0,0,0);
+  document.getElementById('kanban').innerHTML=KANBAN_STATUSES.map(col=>{
+    const cards=list.filter(t=>t.status===col.key);
+    return `<div class="kanban-col">
+      <div class="k-col-head ${col.cls}">${col.label} <span class="k-col-count">${cards.length}</span></div>
+      <div class="k-col-body">${cards.map(t=>renderTaskCard(t,today)).join('')||'<div class="empty-note">Vide</div>'}</div>
+    </div>`;
+  }).join('');
+  document.querySelectorAll('#kanban .k-card[data-id]').forEach(c=>c.addEventListener('click',ev=>{
+    if(ev.target.closest('.k-card-link')) return;
+    openTaskForm(c.dataset.id);
+  }));
+}
+function renderTaskCard(t,today){
+  const L=LIVRABLES.find(x=>x.key===t.category);
+  const m=t.assignee?memberById(t.assignee):null;
+  const dl=t.deadline?new Date(t.deadline+'T00:00:00'):null;
+  const overdue = dl && dl<today && t.status!=='done' && t.status!=='deposited';
+  return `<div class="k-card" data-id="${esc(t.id)}">
+    <div class="k-card-title">${esc(t.title)}</div>
+    <div class="k-card-meta">
+      ${L?`<span class="tk-stage">${esc(L.label)}</span>`:''}
+      ${m?`<span class="ava-sm" style="width:22px;height:22px;margin:0;background:${m.color}" title="${esc(m.name)}">${initials(m.name)}</span>`:''}
+      ${t.deadline?`<span class="k-card-date${overdue?' warn':''}">${fmtDate(t.deadline)}</span>`:''}
+    </div>
+    ${t.jalon?`<div class="k-card-jalon">📌 ${esc(t.jalon)}</div>`:''}
+    ${t.link&&isHttpUrl(t.link)?`<a class="btn sm k-card-link" href="${esc(t.link)}" target="_blank" rel="noopener noreferrer">Ouvrir Proton</a>`:''}
+  </div>`;
+}
+function openTaskForm(id){
+  const box=document.getElementById('task-form');
+  if(!box) return;
+  const t=id?TASKS.find(x=>x.id===id):{id:null,title:'',category:LIVRABLES[0].key,projectId:'',assignee:'',deadline:'',jalon:'',link:'',status:'todo'};
+  if(id&&!t){ return; }
+  const catOpts=LIVRABLES.map(L=>`<option value="${esc(L.key)}"${L.key===t.category?' selected':''}>${esc(L.label)}</option>`).join('');
+  const whoOpts='<option value="">— personne —</option>'+TEAM.map(m=>`<option value="${esc(m.id)}"${m.id===(t.assignee||'')?' selected':''}>${esc(m.name)}</option>`).join('');
+  const projOpts='<option value="">— aucun projet —</option>'+PROJECTS.map(p=>`<option value="${esc(p.id)}"${p.id===(t.projectId||'')?' selected':''}>${esc(p.title)}</option>`).join('');
+  const statusOpts=KANBAN_STATUSES.map(s=>`<option value="${esc(s.key)}"${s.key===t.status?' selected':''}>${esc(s.label)}</option>`).join('');
+  box.innerHTML=`
+    <div class="invite-card">
+      <input id="tk-title" placeholder="Titre de la tâche" value="${esc(t.title)}" style="flex:1 1 240px">
+      <select id="tk-cat">${catOpts}</select>
+      <select id="tk-proj">${projOpts}</select>
+      <select id="tk-who">${whoOpts}</select>
+      <input id="tk-date" type="date" value="${esc(t.deadline||'')}">
+      <input id="tk-jalon" placeholder="Jalon (ex. Validation client)" value="${esc(t.jalon||'')}" style="flex:1 1 180px">
+      <input id="tk-link" placeholder="Lien Proton (https://…)" value="${esc(t.link||'')}" style="flex:1 1 220px">
+      <select id="tk-status">${statusOpts}</select>
+      <button class="btn primary sm" id="tk-save">${id?'Enregistrer':'Créer la tâche'}</button>
+      ${id?'<button class="btn sm" id="tk-del">Supprimer</button>':''}
+      <button class="btn sm" id="tk-cancel">Annuler</button>
+    </div>`;
+  document.getElementById('tk-save').addEventListener('click',()=>saveTaskFromForm(id));
+  document.getElementById('tk-cancel').addEventListener('click',()=>{ box.innerHTML=''; });
+  if(id){ document.getElementById('tk-del').addEventListener('click',()=>{
+    if(!confirm('Supprimer cette tâche ?')) return;
+    TASKS=TASKS.filter(x=>x.id!==id); saveTasks(); box.innerHTML=''; renderKanban(); toast('Tâche supprimée');
+  }); }
+  document.getElementById('tk-title').focus();
+}
+function saveTaskFromForm(id){
+  const title=document.getElementById('tk-title').value.trim();
+  if(!title){ toast('Donnez un titre'); return; }
+  const category=document.getElementById('tk-cat').value;
+  const projectId=document.getElementById('tk-proj').value;
+  const assignee=document.getElementById('tk-who').value;
+  const deadline=document.getElementById('tk-date').value;
+  const jalon=document.getElementById('tk-jalon').value.trim();
+  const link=document.getElementById('tk-link').value.trim();
+  const status=document.getElementById('tk-status').value;
+  if(link&&!isHttpUrl(link)){ toast('Lien invalide — il doit commencer par https://'); return; }
+  if(id){
+    const i=TASKS.findIndex(t=>t.id===id);
+    if(i>=0) TASKS[i]={...TASKS[i],title,category,projectId,assignee,deadline,jalon,link,status};
+  } else {
+    TASKS.push({id:'t_'+Date.now(),title,category,projectId,assignee,deadline,jalon,link,status});
+  }
+  saveTasks();
+  document.getElementById('task-form').innerHTML='';
+  renderKanban();
+  toast(id?'Tâche mise à jour':'Tâche créée');
+}
+
 /* ===== NAV ===== */
-const VIEW_NAMES={dashboard:'Tableau de bord',projets:'Projets',docs:'Documents',gantt:'Calendrier',equipe:'Équipe'};
-const SEARCH_PLACEHOLDER={dashboard:'Rechercher un projet…',projets:'Rechercher un projet…',docs:'Rechercher un document…',gantt:'Rechercher un projet…',equipe:'Rechercher un membre…'};
+const VIEW_NAMES={dashboard:'Tableau de bord',projets:'Projets',docs:'Documents',kanban:'Kanban',gantt:'Calendrier',equipe:'Équipe'};
+const SEARCH_PLACEHOLDER={dashboard:'Rechercher un projet…',projets:'Rechercher un projet…',docs:'Rechercher un document…',kanban:'Rechercher une tâche…',gantt:'Rechercher un projet…',equipe:'Rechercher un membre…'};
 function switchView(v){
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
@@ -888,6 +1014,7 @@ function switchView(v){
   if(v==='dashboard') renderDashboard();
   if(v==='projets') renderProjets();
   if(v==='docs') renderDocs();
+  if(v==='kanban') renderKanban();
   if(v==='gantt') renderGantt();
   if(v==='equipe') renderTeam();
 }
@@ -906,6 +1033,7 @@ document.getElementById('search').addEventListener('input',()=>{
   else if(v==='projets') renderProjets();
   else if(v==='gantt') renderGantt();
   else if(v==='equipe') renderTeam();
+  else if(v==='kanban') renderKanban();
   else if(v==='docs'){ const dq=document.getElementById('ds-q'); if(dq){ dq.value=document.getElementById('search').value; dsRender(); } }
 });
 
@@ -978,6 +1106,8 @@ document.getElementById('nav-count-proj').textContent=PROJECTS.length;
 /* init */
 loadState();
 loadTeam();
+loadTasks();
 (function(){ const b=document.getElementById('invite-btn'); if(b) b.addEventListener('click',showInviteForm); })();
+(function(){ const b=document.getElementById('task-new-btn'); if(b) b.addEventListener('click',()=>openTaskForm(null)); })();
 buildFilterbar();
 renderDashboard();

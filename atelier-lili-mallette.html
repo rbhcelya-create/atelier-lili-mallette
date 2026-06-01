@@ -36,6 +36,10 @@
         <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/></svg>
         Documents
       </button>
+      <button class="nav-item" data-view="kanban">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="13" rx="1"/></svg>
+        Kanban
+      </button>
       <button class="nav-item" data-view="gantt">
         <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 5h11M3 12h16M3 19h8"/><rect x="3" y="3" width="2" height="4" rx="1" fill="currentColor" stroke="none"/></svg>
         Calendrier
@@ -137,6 +141,23 @@
           </div>
         </div>
         <div class="panel" id="ds-panel" style="padding:20px"></div>
+      </section>
+
+      <!-- ============ KANBAN ============ -->
+      <section class="view" id="view-kanban">
+        <div class="page-title-row">
+          <div>
+            <h1 class="title">Kanban</h1>
+            <div class="subtitle">Toutes les tâches de production (Balados · Vidéos · Spectacles · Fiches pédagogiques).</div>
+          </div>
+          <button class="btn primary" id="task-new-btn">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
+            Nouvelle tâche
+          </button>
+        </div>
+        <div id="task-form"></div>
+        <div class="filterbar" id="k-filterbar"></div>
+        <div class="kanban" id="kanban"></div>
       </section>
 
       <!-- ============ GANTT ============ -->
