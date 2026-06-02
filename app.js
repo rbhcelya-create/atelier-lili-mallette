@@ -50,6 +50,7 @@ const PROJECTS = [
     id:'p1', style:'rigolo', fileCode:'2026-05-11_Filou_la_fusée',
     title:'Filou la fusée', status:'livr',
     gStart:0.4, gEnd:2.2, deadline:'2026-05-28',
+    folderLinks:{ texte:'https://drive.proton.me/urls/DOSSIER_FILOU_TEXTE', images:'https://drive.proton.me/urls/DOSSIER_FILOU_IMAGES', audio:'', video:'' },
     stages:{ texte:'done', miseforme:'done', fiche:'done', images:'active', balado:'active', video:'active', spectacle:'todo', site:'todo', distrib:'todo' },
     deliverables:[
       { type:'balado', state:'wip', prog:55 },
@@ -78,6 +79,7 @@ const PROJECTS = [
     id:'p2', style:'apaisant', fileCode:'2026-05-04_Bernardo_elephanteau',
     title:'Bernardo l\'éléphanteau', status:'prod',
     gStart:0.1, gEnd:1.7, deadline:'2026-05-26',
+    folderLinks:{ audio:'https://drive.proton.me/urls/DOSSIER_BERNARDO_AUDIO', texte:'', images:'', video:'' },
     stages:{ texte:'done', miseforme:'done', fiche:'active', images:'active', balado:'active', video:'todo', spectacle:'todo', site:'todo', distrib:'todo' },
     deliverables:[
       { type:'balado', state:'wip', prog:40 },
@@ -116,6 +118,7 @@ const PROJECTS = [
     id:'p4', style:'contes', fileCode:'2026-04-20_Le_geant_qui_faisait_peur',
     title:'Le géant qui faisait peur', status:'publie',
     gStart:0.0, gEnd:1.0, deadline:'2026-05-09',
+    folderLinks:{ video:'https://drive.proton.me/urls/DOSSIER_GEANT_VIDEO', audio:'https://drive.proton.me/urls/DOSSIER_GEANT_AUDIO', texte:'', images:'' },
     stages:{ texte:'done', miseforme:'done', fiche:'done', images:'done', balado:'done', video:'done', spectacle:'todo', site:'done', distrib:'done' },
     deliverables:[
       { type:'balado', state:'on', prog:100 },
@@ -139,6 +142,7 @@ const PROJECTS = [
     id:'p5', style:'contes', fileCode:'2026-06-06_Tifi_a_Lill-la',
     title:'Tifi a Lill-la', status:'prod',
     gStart:1.4, gEnd:3.4, deadline:'2026-06-25',
+    folderLinks:{ images:'https://drive.proton.me/urls/DOSSIER_TIFI_IMAGES', texte:'', audio:'', video:'' },
     stages:{ texte:'done', miseforme:'done', fiche:'active', images:'active', balado:'active', video:'todo', spectacle:'active', site:'todo', distrib:'todo' },
     deliverables:[
       { type:'balado', state:'wip', prog:25 },
@@ -201,11 +205,15 @@ const DOC_CATEGORIES = [
   { key:'texte',  label:'Texte',  code:'TXT' },
   { key:'audio',  label:'Audio',  code:'AUD' }
 ];
+/* Documents — le lien Proton n'est plus stocké par document : il est récupéré
+   dynamiquement via docFolderLink() à partir de project.folderLinks[categorie].
+   On garde le champ `lienProton` en option pour compat des anciennes données
+   en localStorage, mais il n'est plus écrit pour les nouveaux documents. */
 const DOCUMENTS = [
-  { id:'d1', nomOriginal:'script v3',                  projetId:'p1', categorie:'texte',  lienProton:'https://drive.proton.me/urls/EXEMPLE_TEXTE_FILOU',     notes:'Version validée', createdAt:'2026-05-12' },
-  { id:'d2', nomOriginal:'voix narration bernardo',    projetId:'p2', categorie:'audio',  lienProton:'https://drive.proton.me/urls/EXEMPLE_AUDIO_BERNARDO', notes:'',                createdAt:'2026-05-08' },
-  { id:'d3', nomOriginal:'montage final',              projetId:'p4', categorie:'video',  lienProton:'https://drive.proton.me/urls/EXEMPLE_VIDEO_GEANT',    notes:'Master',          createdAt:'2026-05-04' },
-  { id:'d4', nomOriginal:'planches scenes 1-3',        projetId:'p5', categorie:'images', lienProton:'https://drive.proton.me/urls/EXEMPLE_IMG_TIFI',      notes:'Approuvées',      createdAt:'2026-06-08' }
+  { id:'d1', nomOriginal:'script v3',               projetId:'p1', categorie:'texte',  notes:'Version validée', createdAt:'2026-05-12' },
+  { id:'d2', nomOriginal:'voix narration bernardo', projetId:'p2', categorie:'audio',  notes:'',                createdAt:'2026-05-08' },
+  { id:'d3', nomOriginal:'montage final',           projetId:'p4', categorie:'video',  notes:'Master',          createdAt:'2026-05-04' },
+  { id:'d4', nomOriginal:'planches scenes 1-3',     projetId:'p5', categorie:'images', notes:'Approuvées',      createdAt:'2026-06-08' }
 ];
 
 const STATUS = {
@@ -257,6 +265,24 @@ function generateFileName({nomOriginal, projetId, categorie}){
   const code=cat?cat.code:'XXX';
   return `${slugProj}_${code}_${slugOrig}`;
 }
+/* Lien Proton du dossier de destination, dérivé du projet + catégorie.
+   Renseigné une fois par projet/catégorie, réutilisé pour tous les documents
+   de cette combinaison. Si le projet n'a pas encore de lien, on retombe sur
+   l'ancien champ `lienProton` du document (compat) puis sur ''. */
+function docFolderLink(d){
+  if(!d) return '';
+  const p=PROJECTS.find(x=>x.id===d.projetId);
+  if(p&&p.folderLinks&&p.folderLinks[d.categorie]) return p.folderLinks[d.categorie];
+  return d.lienProton||'';
+}
+function setProjectFolderLink(projetId, categorie, url){
+  const p=PROJECTS.find(x=>x.id===projetId);
+  if(!p||!categorie) return false;
+  p.folderLinks=p.folderLinks||{};
+  p.folderLinks[categorie]=url||'';
+  saveState();
+  return true;
+}
 function livDocs(p,lk){ p.docs=p.docs||{}; if(!p.docs[lk]) p.docs[lk]={}; return p.docs[lk]; }
 function folderLinks(p,lk,fname){ const d=(p.docs&&p.docs[lk])||{}; return d[fname]||[]; }
 function livLinkCount(p,lk){ const d=(p.docs&&p.docs[lk])||{}; return Object.values(d).reduce((a,arr)=>a+(arr?arr.length:0),0); }
@@ -300,7 +326,8 @@ function saveState(){
       dateStart:p.dateStart||null,
       dateEnd:p.dateEnd||null,
       deadline:p.deadline||null,
-      livDates:p.livDates||{}
+      livDates:p.livDates||{},
+      folderLinks:p.folderLinks||{}
     }; });
     localStorage.setItem(LS_KEY,JSON.stringify(data));
   }catch(e){}
@@ -319,6 +346,7 @@ function loadState(){
       if(typeof s.dateEnd==='string') p.dateEnd=s.dateEnd;
       if(typeof s.deadline==='string') p.deadline=s.deadline;
       if(s.livDates&&typeof s.livDates==='object') p.livDates=s.livDates;
+      if(s.folderLinks&&typeof s.folderLinks==='object') p.folderLinks={...(p.folderLinks||{}),...s.folderLinks};
     });
   }catch(e){}
 }
@@ -984,7 +1012,8 @@ function renderDocCard(d){
   const proj=PROJECTS.find(p=>p.id===d.projetId);
   const cat=DOC_CATEGORIES.find(c=>c.key===d.categorie);
   const name=generateFileName({nomOriginal:d.nomOriginal,projetId:d.projetId,categorie:d.categorie});
-  const ok=isHttpUrl(d.lienProton);
+  const folderUrl=docFolderLink(d);
+  const ok=isHttpUrl(folderUrl);
   return `<article class="proj-card doc-card" data-docid="${esc(d.id)}">
     <div class="pc-head">
       <div class="pc-top">
@@ -996,16 +1025,16 @@ function renderDocCard(d){
     </div>
     <div class="pc-foot">
       <span>${esc(fmtDate(d.createdAt))}</span>
-      ${ok?`<a href="${esc(d.lienProton)}" target="_blank" rel="noopener noreferrer" class="doc-proton-link">Ouvrir sur Proton ↗</a>`:'<span style="color:var(--ink-3)">Pas de lien</span>'}
+      ${ok?`<a href="${esc(folderUrl)}" target="_blank" rel="noopener noreferrer" class="doc-proton-link">Ouvrir le dossier ↗</a>`:'<span style="color:var(--ink-3)">Dossier non lié</span>'}
     </div>
   </article>`;
 }
 function openDocModal(id){
   const isEdit=!!id;
-  const d=isEdit?DOCUMENTS.find(x=>x.id===id):{id:null,nomOriginal:'',projetId:'',categorie:'',lienProton:'',notes:''};
+  const d=isEdit?DOCUMENTS.find(x=>x.id===id):{id:null,nomOriginal:'',projetId:'',categorie:'',notes:''};
   if(isEdit&&!d) return;
   document.getElementById('doc-m-title').textContent=isEdit?'Modifier le document':'Nouveau document';
-  document.getElementById('doc-m-sub').textContent=isEdit?'Modifiez puis enregistrez':'Renseignez les 5 étapes';
+  document.getElementById('doc-m-sub').textContent=isEdit?'Modifiez puis enregistrez':'Renseignez les 5 étapes — flux automatisé';
   const body=document.getElementById('doc-m-body');
   const projOpts='<option value="">— sélectionnez —</option>'+PROJECTS.map(p=>`<option value="${esc(p.id)}"${p.id===(d.projetId||'')?' selected':''}>${esc(p.title)}</option>`).join('');
   const catChips=DOC_CATEGORIES.map(c=>`<button class="chip ${c.key===d.categorie?'active':''}" data-dform-cat="${esc(c.key)}">${esc(c.label)}</button>`).join('');
@@ -1026,14 +1055,23 @@ function openDocModal(id){
         <button class="btn sm" id="df-copy" disabled>📋 Copier</button>
       </div>
     </div></div>
-    <div class="doc-step"><span class="step-num">4</span><div class="doc-step-body">
-      <div class="field-label">Coller le lien Proton Drive</div>
-      <input id="df-link" type="url" placeholder="https://drive.proton.me/…" value="${esc(d.lienProton||'')}">
+    <div class="doc-step"><span class="step-num">4</span><div class="doc-step-body" id="df-step4-body">
+      <div class="field-label">Lien d'accès au dossier Proton</div>
+      <div id="df-folder-zone" class="doc-folder-zone">
+        <div class="doc-step-instruction muted">Sélectionnez d'abord un projet et une catégorie.</div>
+      </div>
     </div></div>
     <div class="doc-step"><span class="step-num">5</span><div class="doc-step-body">
-      <div class="field-label">Notes (optionnel)</div>
-      <textarea id="df-notes" rows="2">${esc(d.notes||'')}</textarea>
+      <div class="field-label">Glisser le document dans le dossier</div>
+      <div class="doc-step-instruction">
+        Une fois le dossier ouvert sur Proton Drive : <b>collez le nom final</b> (Ctrl+V) sur le fichier renommé, puis <b>glissez-le</b> dans le dossier.<br>
+        Quand c'est fait, cliquez sur <b>Enregistrer</b> pour garder une trace du document dans l'index.
+      </div>
     </div></div>
+    <div class="doc-notes-block">
+      <div class="field-label" style="margin-bottom:6px">Notes (optionnel)</div>
+      <textarea id="df-notes" rows="2" placeholder="ex. Version validée, à mettre en ligne le 18 juin…">${esc(d.notes||'')}</textarea>
+    </div>
     <div class="doc-modal-foot">
       ${isEdit?`<button class="btn sm" id="df-del" style="color:var(--accent)">Supprimer</button>`:'<span></span>'}
       <div style="display:flex;gap:8px">
@@ -1041,7 +1079,78 @@ function openDocModal(id){
         <button class="btn primary" id="df-save" disabled>Enregistrer</button>
       </div>
     </div>`;
-  const st={nomOriginal:d.nomOriginal||'',projetId:d.projetId||'',categorie:d.categorie||'',lienProton:d.lienProton||'',notes:d.notes||''};
+  const st={nomOriginal:d.nomOriginal||'',projetId:d.projetId||'',categorie:d.categorie||'',notes:d.notes||''};
+
+  /* Rendu de la zone Step 4 — adaptatif :
+     - si projet+catégorie pas encore choisis → instruction
+     - si lien dossier déjà connu pour ce (projet, catégorie) → boutons Ouvrir / Copier le lien + édition discrète
+     - sinon → input pour coller le lien (auto-save au niveau projet) */
+  const renderStep4=()=>{
+    const zone=document.getElementById('df-folder-zone');
+    if(!zone) return;
+    if(!st.projetId||!st.categorie){
+      zone.innerHTML='<div class="doc-step-instruction muted">Sélectionnez d\'abord un projet et une catégorie à l\'étape 2.</div>';
+      return;
+    }
+    const proj=PROJECTS.find(x=>x.id===st.projetId);
+    const cat=DOC_CATEGORIES.find(x=>x.key===st.categorie);
+    const url=docFolderLink({projetId:st.projetId,categorie:st.categorie});
+    const ctx=`${esc(proj?proj.title:'')} · ${esc(cat?cat.label:st.categorie)}`;
+    if(isHttpUrl(url)){
+      zone.innerHTML=`
+        <div class="doc-folder-context">${ctx}</div>
+        <div class="doc-folder-url"><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a></div>
+        <div class="doc-folder-actions">
+          <button class="btn primary sm" id="df-open">↗ Ouvrir le dossier</button>
+          <button class="btn sm" id="df-copy-folder">📋 Copier le lien</button>
+          <button class="btn sm" id="df-edit-folder">Modifier</button>
+        </div>
+        <div class="doc-step-instruction">Une fois le dossier ouvert, collez le <b>nom final</b> (étape 3) puis glissez le fichier (étape 5).</div>`;
+      document.getElementById('df-open').addEventListener('click',()=>window.open(url,'_blank','noopener'));
+      document.getElementById('df-copy-folder').addEventListener('click',()=>{
+        if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(()=>toast('Lien du dossier copié')); }
+        else { const ta=document.createElement('textarea'); ta.value=url; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); toast('Lien du dossier copié'); }
+      });
+      document.getElementById('df-edit-folder').addEventListener('click',()=>{
+        renderStep4Edit(url);
+      });
+    } else {
+      renderStep4Edit('');
+    }
+  };
+  const renderStep4Edit=(currentUrl)=>{
+    const zone=document.getElementById('df-folder-zone');
+    if(!zone) return;
+    const proj=PROJECTS.find(x=>x.id===st.projetId);
+    const cat=DOC_CATEGORIES.find(x=>x.key===st.categorie);
+    const ctx=`${esc(proj?proj.title:'')} · ${esc(cat?cat.label:st.categorie)}`;
+    zone.innerHTML=`
+      <div class="doc-folder-context">${ctx}</div>
+      <input id="df-folder-input" type="url" placeholder="https://drive.proton.me/…" value="${esc(currentUrl||'')}">
+      <div class="doc-folder-actions">
+        <button class="btn primary sm" id="df-folder-save">Enregistrer ce lien pour ${ctx}</button>
+        ${currentUrl?'<button class="btn sm" id="df-folder-cancel">Annuler</button>':''}
+      </div>
+      <div class="doc-step-instruction muted">Ce lien sera réutilisé pour tous les documents de cette catégorie dans ce projet.</div>`;
+    const input=document.getElementById('df-folder-input');
+    const saveBtn=document.getElementById('df-folder-save');
+    const updateBtn=()=>{ saveBtn.disabled=!isHttpUrl(input.value.trim()); };
+    input.addEventListener('input',()=>{ updateBtn(); refresh(); });
+    updateBtn();
+    saveBtn.addEventListener('click',()=>{
+      const v=input.value.trim();
+      if(!isHttpUrl(v)){ toast('Lien invalide — il doit commencer par https://'); return; }
+      if(setProjectFolderLink(st.projetId,st.categorie,v)){
+        toast('Lien du dossier enregistré');
+        renderStep4();
+        refresh();
+      }
+    });
+    const cancel=document.getElementById('df-folder-cancel');
+    if(cancel) cancel.addEventListener('click',()=>{ renderStep4(); refresh(); });
+    setTimeout(()=>input.focus(),20);
+  };
+
   const refresh=()=>{
     const name=generateFileName(st);
     const prev=document.getElementById('df-name');
@@ -1049,16 +1158,20 @@ function openDocModal(id){
     const save=document.getElementById('df-save');
     if(name){ prev.textContent=name; prev.classList.remove('empty'); copy.disabled=false; }
     else{ prev.textContent='Le nom apparaîtra ici…'; prev.classList.add('empty'); copy.disabled=true; }
-    save.disabled=!(st.nomOriginal.trim()&&st.projetId&&st.categorie&&isHttpUrl(st.lienProton));
+    /* Validation : nom + projet + catégorie + lien dossier existant. Si on est en mode édition
+       inline, on lit aussi la valeur du champ pour activer Enregistrer dès qu'elle est valide. */
+    const folderUrl=docFolderLink({projetId:st.projetId,categorie:st.categorie});
+    const inlineInput=document.getElementById('df-folder-input');
+    const effectiveFolder=isHttpUrl(folderUrl)?folderUrl:(inlineInput?inlineInput.value.trim():'');
+    save.disabled=!(st.nomOriginal.trim()&&st.projetId&&st.categorie&&isHttpUrl(effectiveFolder));
   };
   document.getElementById('df-nom').addEventListener('input',e=>{ st.nomOriginal=e.target.value; refresh(); });
-  document.getElementById('df-proj').addEventListener('change',e=>{ st.projetId=e.target.value; refresh(); });
+  document.getElementById('df-proj').addEventListener('change',e=>{ st.projetId=e.target.value; renderStep4(); refresh(); });
   document.querySelectorAll('#df-cats [data-dform-cat]').forEach(ch=>ch.addEventListener('click',()=>{
     st.categorie=ch.dataset.dformCat;
     document.querySelectorAll('#df-cats .chip').forEach(c=>c.classList.toggle('active', c.dataset.dformCat===st.categorie));
-    refresh();
+    renderStep4(); refresh();
   }));
-  document.getElementById('df-link').addEventListener('input',e=>{ st.lienProton=e.target.value.trim(); refresh(); });
   document.getElementById('df-notes').addEventListener('input',e=>{ st.notes=e.target.value; });
   document.getElementById('df-copy').addEventListener('click',()=>{
     const name=generateFileName(st); if(!name) return;
@@ -1066,7 +1179,16 @@ function openDocModal(id){
     else { const ta=document.createElement('textarea'); ta.value=name; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); toast('Nom copié'); }
   });
   document.getElementById('df-cancel').addEventListener('click',closeDocModal);
-  document.getElementById('df-save').addEventListener('click',()=>saveDocFromForm(id,st));
+  document.getElementById('df-save').addEventListener('click',()=>{
+    /* Si l'utilisateur a saisi un lien dossier inline mais n'a pas cliqué « Enregistrer ce lien »,
+       on le persiste automatiquement avant de sauvegarder le document. */
+    const inlineInput=document.getElementById('df-folder-input');
+    if(inlineInput){
+      const v=inlineInput.value.trim();
+      if(isHttpUrl(v)) setProjectFolderLink(st.projetId,st.categorie,v);
+    }
+    saveDocFromForm(id,st);
+  });
   if(isEdit){
     document.getElementById('df-del').addEventListener('click',()=>{
       if(!confirm('Supprimer ce document ?')) return;
@@ -1075,31 +1197,36 @@ function openDocModal(id){
       DOCUMENTS.splice(i,1); saveDocs(); closeDocModal(); renderDocList(); toast('Document supprimé');
     });
   }
+  renderStep4();
   refresh();
   document.getElementById('doc-overlay').classList.add('open');
   setTimeout(()=>{ const n=document.getElementById('df-nom'); if(n) n.focus(); },50);
 }
 function closeDocModal(){ document.getElementById('doc-overlay').classList.remove('open'); }
 function saveDocFromForm(id,s){
-  if(!s.nomOriginal.trim()||!s.projetId||!s.categorie||!isHttpUrl(s.lienProton)) return;
+  /* Le lien Proton n'est plus stocké sur le document : il est dérivé du projet+catégorie
+     via docFolderLink(). On vérifie juste qu'il existe au moment de la sauvegarde. */
+  const folderUrl=docFolderLink({projetId:s.projetId,categorie:s.categorie});
+  if(!s.nomOriginal.trim()||!s.projetId||!s.categorie||!isHttpUrl(folderUrl)) return;
   if(id){
     const i=DOCUMENTS.findIndex(x=>x.id===id);
-    if(i>=0) DOCUMENTS[i]={...DOCUMENTS[i],nomOriginal:s.nomOriginal.trim(),projetId:s.projetId,categorie:s.categorie,lienProton:s.lienProton,notes:s.notes||''};
+    if(i>=0) DOCUMENTS[i]={...DOCUMENTS[i],nomOriginal:s.nomOriginal.trim(),projetId:s.projetId,categorie:s.categorie,notes:s.notes||''};
   } else {
-    DOCUMENTS.push({id:'d_'+Date.now(),nomOriginal:s.nomOriginal.trim(),projetId:s.projetId,categorie:s.categorie,lienProton:s.lienProton,notes:s.notes||'',createdAt:fmtIso(new Date())});
+    DOCUMENTS.push({id:'d_'+Date.now(),nomOriginal:s.nomOriginal.trim(),projetId:s.projetId,categorie:s.categorie,notes:s.notes||'',createdAt:fmtIso(new Date())});
   }
   saveDocs(); closeDocModal(); renderDocList();
   toast(id?'Document mis à jour':'Document ajouté');
 }
 function exportDocsCSV(){
-  const headers=['nom_original','projet','categorie','nom_final','lien_proton','date_creation','notes'];
+  const headers=['nom_original','projet','categorie','nom_final','lien_dossier','date_creation','notes'];
   const csvEsc=v=>{ const s=String(v??''); return /[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
   const lines=[headers.join(',')];
   DOCUMENTS.forEach(d=>{
     const proj=PROJECTS.find(p=>p.id===d.projetId);
     const cat=DOC_CATEGORIES.find(c=>c.key===d.categorie);
     const name=generateFileName({nomOriginal:d.nomOriginal,projetId:d.projetId,categorie:d.categorie});
-    lines.push([csvEsc(d.nomOriginal||''),csvEsc(proj?proj.title:''),csvEsc(cat?cat.label:d.categorie||''),csvEsc(name),csvEsc(d.lienProton||''),csvEsc(d.createdAt||''),csvEsc(d.notes||'')].join(','));
+    const folderUrl=docFolderLink(d);
+    lines.push([csvEsc(d.nomOriginal||''),csvEsc(proj?proj.title:''),csvEsc(cat?cat.label:d.categorie||''),csvEsc(name),csvEsc(folderUrl),csvEsc(d.createdAt||''),csvEsc(d.notes||'')].join(','));
   });
   const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
   const url=URL.createObjectURL(blob);
@@ -1387,11 +1514,35 @@ document.addEventListener('mouseup',()=>{
 /* nav project count */
 document.getElementById('nav-count-proj').textContent=PROJECTS.length;
 
+/* Migration douce :
+   Avant ce changement, chaque document portait son propre lienProton.
+   Désormais le lien est un attribut du projet (par catégorie). Pour ne pas
+   perdre les vraies URLs Proton déjà saisies, on remonte chaque ancien
+   lienProton vers project.folderLinks[categorie] si la place est vide ou
+   encore occupée par une URL placeholder de démo (DOSSIER_*). Idempotent. */
+function migrateLegacyDocLinks(){
+  let changed=false;
+  DOCUMENTS.forEach(d=>{
+    if(!d.lienProton) return;
+    const p=PROJECTS.find(x=>x.id===d.projetId);
+    if(!p) return;
+    p.folderLinks=p.folderLinks||{};
+    const existing=p.folderLinks[d.categorie]||'';
+    const isPlaceholder=/DOSSIER_/.test(existing);
+    if(!existing||isPlaceholder){
+      p.folderLinks[d.categorie]=d.lienProton;
+      changed=true;
+    }
+  });
+  if(changed) saveState();
+}
+
 /* init */
 loadState();
 loadTeam();
 loadTasks();
 loadDocs();
+migrateLegacyDocLinks();
 (function(){
   const n=document.getElementById('doc-new-btn');
   if(n) n.addEventListener('click',()=>openDocModal(null));
