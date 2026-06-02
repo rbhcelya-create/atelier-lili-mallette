@@ -195,6 +195,19 @@ const PROJECTS = [
   }
 ];
 
+const DOC_CATEGORIES = [
+  { key:'images', label:'Images', code:'IMG' },
+  { key:'video',  label:'Vidéo',  code:'VID' },
+  { key:'texte',  label:'Texte',  code:'TXT' },
+  { key:'audio',  label:'Audio',  code:'AUD' }
+];
+const DOCUMENTS = [
+  { id:'d1', nomOriginal:'script v3',                  projetId:'p1', categorie:'texte',  lienProton:'https://drive.proton.me/urls/EXEMPLE_TEXTE_FILOU',     notes:'Version validée', createdAt:'2026-05-12' },
+  { id:'d2', nomOriginal:'voix narration bernardo',    projetId:'p2', categorie:'audio',  lienProton:'https://drive.proton.me/urls/EXEMPLE_AUDIO_BERNARDO', notes:'',                createdAt:'2026-05-08' },
+  { id:'d3', nomOriginal:'montage final',              projetId:'p4', categorie:'video',  lienProton:'https://drive.proton.me/urls/EXEMPLE_VIDEO_GEANT',    notes:'Master',          createdAt:'2026-05-04' },
+  { id:'d4', nomOriginal:'planches scenes 1-3',        projetId:'p5', categorie:'images', lienProton:'https://drive.proton.me/urls/EXEMPLE_IMG_TIFI',      notes:'Approuvées',      createdAt:'2026-06-08' }
+];
+
 const STATUS = {
   idee:   { label:'Idée',          cls:'idee' },
   prod:   { label:'En production', cls:'prod' },
@@ -221,6 +234,29 @@ const LIV_SVG={
 /* ===== helpers ===== */
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const isHttpUrl = u => /^https?:\/\//i.test(String(u||'').trim());
+
+/* ----------------------------------------------------------------------
+   À METTRE À JOUR avec le format exact fourni par le client
+   Format provisoire : {slug-projet}_{CAT}_{slug-nom-original}
+     - slug-projet  : titre du projet, accents retirés, minuscules,
+                      caractères non-alphanumériques → tirets
+     - CAT          : code 3 lettres de la catégorie (IMG/VID/TXT/AUD)
+     - slug-nom-original : nom original, accents retirés, minuscules,
+                           caractères non-alphanumériques → underscores
+   Retourne '' si une donnée manque, pour que l'UI puisse afficher un
+   placeholder.
+   ---------------------------------------------------------------------- */
+function generateFileName({nomOriginal, projetId, categorie}){
+  if(!nomOriginal||!projetId||!categorie) return '';
+  const proj=PROJECTS.find(p=>p.id===projetId);
+  if(!proj) return '';
+  const strip=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+  const slugProj=strip(proj.title).replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+  const slugOrig=strip(nomOriginal).replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+  const cat=DOC_CATEGORIES.find(c=>c.key===categorie);
+  const code=cat?cat.code:'XXX';
+  return `${slugProj}_${code}_${slugOrig}`;
+}
 function livDocs(p,lk){ p.docs=p.docs||{}; if(!p.docs[lk]) p.docs[lk]={}; return p.docs[lk]; }
 function folderLinks(p,lk,fname){ const d=(p.docs&&p.docs[lk])||{}; return d[fname]||[]; }
 function livLinkCount(p,lk){ const d=(p.docs&&p.docs[lk])||{}; return Object.values(d).reduce((a,arr)=>a+(arr?arr.length:0),0); }
@@ -848,6 +884,12 @@ function addMessage(){
 function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
 document.getElementById('m-close').addEventListener('click',closeModal);
 document.getElementById('overlay').addEventListener('click',e=>{ if(e.target.id==='overlay') closeModal(); });
+(function(){
+  const ov=document.getElementById('doc-overlay');
+  const cb=document.getElementById('doc-m-close');
+  if(cb) cb.addEventListener('click',closeDocModal);
+  if(ov) ov.addEventListener('click',e=>{ if(e.target.id==='doc-overlay') closeDocModal(); });
+})();
 
 /* ===== DOCUMENTS (recherche globale) ===== */
 function dsRender(){
@@ -909,6 +951,162 @@ function renderDocs(){
     el.addEventListener(id==='ds-q'?'input':'change',dsRender);
   });
   dsRender();
+  renderDocList();
+}
+
+/* ===== DOCUMENTS — module 5 étapes ===== */
+let docCat='tous';
+function renderDocList(){
+  const grid=document.getElementById('doc-grid');
+  const fb=document.getElementById('doc-filterbar');
+  if(!grid||!fb) return;
+  const counts={tous:DOCUMENTS.length};
+  DOC_CATEGORIES.forEach(c=>{ counts[c.key]=DOCUMENTS.filter(d=>d.categorie===c.key).length; });
+  fb.innerHTML=`<button class="chip ${docCat==='tous'?'active':''}" data-dcat="tous">Toutes <span class="c-count">${DOCUMENTS.length}</span></button>`+
+    DOC_CATEGORIES.map(c=>`<button class="chip ${docCat===c.key?'active':''}" data-dcat="${esc(c.key)}">${esc(c.label)} <span class="c-count">${counts[c.key]||0}</span></button>`).join('');
+  fb.querySelectorAll('.chip[data-dcat]').forEach(ch=>ch.addEventListener('click',()=>{ docCat=ch.dataset.dcat; renderDocList(); }));
+  let list=DOCUMENTS.slice();
+  if(docCat!=='tous') list=list.filter(d=>d.categorie===docCat);
+  list.sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+  if(!list.length){
+    grid.innerHTML=`<div class="placeholder" style="grid-column:1/-1">
+      <div class="ph-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/></svg></div>
+      <h2>Aucun document</h2><p>Ajoutez votre premier document avec le bouton « Nouveau document » ci-dessus.</p></div>`;
+    return;
+  }
+  grid.innerHTML=list.map(renderDocCard).join('');
+  grid.querySelectorAll('.doc-card[data-docid]').forEach(c=>c.addEventListener('click',ev=>{
+    if(ev.target.closest('.doc-proton-link')) return;
+    openDocModal(c.dataset.docid);
+  }));
+}
+function renderDocCard(d){
+  const proj=PROJECTS.find(p=>p.id===d.projetId);
+  const cat=DOC_CATEGORIES.find(c=>c.key===d.categorie);
+  const name=generateFileName({nomOriginal:d.nomOriginal,projetId:d.projetId,categorie:d.categorie});
+  const ok=isHttpUrl(d.lienProton);
+  return `<article class="proj-card doc-card" data-docid="${esc(d.id)}">
+    <div class="pc-head">
+      <div class="pc-top">
+        <span class="pc-mono">${esc((cat&&cat.code)||'')}</span>
+        <span class="badge doc-cat-${esc(d.categorie)}">${esc(cat?cat.label:d.categorie)}</span>
+      </div>
+      <h3 style="font-family:'Source Sans 3',ui-monospace,monospace;font-size:13.5px;font-weight:600;line-height:1.3;word-break:break-all">${esc(name||'(nom incomplet)')}</h3>
+      <div class="pc-file">${proj?esc(proj.title):'(projet introuvable)'}</div>
+    </div>
+    <div class="pc-foot">
+      <span>${esc(fmtDate(d.createdAt))}</span>
+      ${ok?`<a href="${esc(d.lienProton)}" target="_blank" rel="noopener noreferrer" class="doc-proton-link">Ouvrir sur Proton ↗</a>`:'<span style="color:var(--ink-3)">Pas de lien</span>'}
+    </div>
+  </article>`;
+}
+function openDocModal(id){
+  const isEdit=!!id;
+  const d=isEdit?DOCUMENTS.find(x=>x.id===id):{id:null,nomOriginal:'',projetId:'',categorie:'',lienProton:'',notes:''};
+  if(isEdit&&!d) return;
+  document.getElementById('doc-m-title').textContent=isEdit?'Modifier le document':'Nouveau document';
+  document.getElementById('doc-m-sub').textContent=isEdit?'Modifiez puis enregistrez':'Renseignez les 5 étapes';
+  const body=document.getElementById('doc-m-body');
+  const projOpts='<option value="">— sélectionnez —</option>'+PROJECTS.map(p=>`<option value="${esc(p.id)}"${p.id===(d.projetId||'')?' selected':''}>${esc(p.title)}</option>`).join('');
+  const catChips=DOC_CATEGORIES.map(c=>`<button class="chip ${c.key===d.categorie?'active':''}" data-dform-cat="${esc(c.key)}">${esc(c.label)}</button>`).join('');
+  body.innerHTML=`
+    <div class="doc-step"><span class="step-num">1</span><div class="doc-step-body">
+      <div class="field-label">Nom original</div>
+      <input id="df-nom" placeholder="ex. bernardo l'éléphanteau" value="${esc(d.nomOriginal||'')}">
+    </div></div>
+    <div class="doc-step"><span class="step-num">2</span><div class="doc-step-body">
+      <div class="field-label">Projet et catégorie</div>
+      <select id="df-proj">${projOpts}</select>
+      <div class="filterbar" id="df-cats" style="margin-top:6px">${catChips}</div>
+    </div></div>
+    <div class="doc-step"><span class="step-num">3</span><div class="doc-step-body">
+      <div class="field-label">Nom final (généré automatiquement)</div>
+      <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+        <div class="doc-name-preview empty" id="df-name">Le nom apparaîtra ici…</div>
+        <button class="btn sm" id="df-copy" disabled>📋 Copier</button>
+      </div>
+    </div></div>
+    <div class="doc-step"><span class="step-num">4</span><div class="doc-step-body">
+      <div class="field-label">Coller le lien Proton Drive</div>
+      <input id="df-link" type="url" placeholder="https://drive.proton.me/…" value="${esc(d.lienProton||'')}">
+    </div></div>
+    <div class="doc-step"><span class="step-num">5</span><div class="doc-step-body">
+      <div class="field-label">Notes (optionnel)</div>
+      <textarea id="df-notes" rows="2">${esc(d.notes||'')}</textarea>
+    </div></div>
+    <div class="doc-modal-foot">
+      ${isEdit?`<button class="btn sm" id="df-del" style="color:var(--accent)">Supprimer</button>`:'<span></span>'}
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="df-cancel">Annuler</button>
+        <button class="btn primary" id="df-save" disabled>Enregistrer</button>
+      </div>
+    </div>`;
+  const st={nomOriginal:d.nomOriginal||'',projetId:d.projetId||'',categorie:d.categorie||'',lienProton:d.lienProton||'',notes:d.notes||''};
+  const refresh=()=>{
+    const name=generateFileName(st);
+    const prev=document.getElementById('df-name');
+    const copy=document.getElementById('df-copy');
+    const save=document.getElementById('df-save');
+    if(name){ prev.textContent=name; prev.classList.remove('empty'); copy.disabled=false; }
+    else{ prev.textContent='Le nom apparaîtra ici…'; prev.classList.add('empty'); copy.disabled=true; }
+    save.disabled=!(st.nomOriginal.trim()&&st.projetId&&st.categorie&&isHttpUrl(st.lienProton));
+  };
+  document.getElementById('df-nom').addEventListener('input',e=>{ st.nomOriginal=e.target.value; refresh(); });
+  document.getElementById('df-proj').addEventListener('change',e=>{ st.projetId=e.target.value; refresh(); });
+  document.querySelectorAll('#df-cats [data-dform-cat]').forEach(ch=>ch.addEventListener('click',()=>{
+    st.categorie=ch.dataset.dformCat;
+    document.querySelectorAll('#df-cats .chip').forEach(c=>c.classList.toggle('active', c.dataset.dformCat===st.categorie));
+    refresh();
+  }));
+  document.getElementById('df-link').addEventListener('input',e=>{ st.lienProton=e.target.value.trim(); refresh(); });
+  document.getElementById('df-notes').addEventListener('input',e=>{ st.notes=e.target.value; });
+  document.getElementById('df-copy').addEventListener('click',()=>{
+    const name=generateFileName(st); if(!name) return;
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(name).then(()=>toast('Nom copié')); }
+    else { const ta=document.createElement('textarea'); ta.value=name; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); toast('Nom copié'); }
+  });
+  document.getElementById('df-cancel').addEventListener('click',closeDocModal);
+  document.getElementById('df-save').addEventListener('click',()=>saveDocFromForm(id,st));
+  if(isEdit){
+    document.getElementById('df-del').addEventListener('click',()=>{
+      if(!confirm('Supprimer ce document ?')) return;
+      const i=DOCUMENTS.findIndex(x=>x.id===id);
+      if(i<0) return;
+      DOCUMENTS.splice(i,1); saveDocs(); closeDocModal(); renderDocList(); toast('Document supprimé');
+    });
+  }
+  refresh();
+  document.getElementById('doc-overlay').classList.add('open');
+  setTimeout(()=>{ const n=document.getElementById('df-nom'); if(n) n.focus(); },50);
+}
+function closeDocModal(){ document.getElementById('doc-overlay').classList.remove('open'); }
+function saveDocFromForm(id,s){
+  if(!s.nomOriginal.trim()||!s.projetId||!s.categorie||!isHttpUrl(s.lienProton)) return;
+  if(id){
+    const i=DOCUMENTS.findIndex(x=>x.id===id);
+    if(i>=0) DOCUMENTS[i]={...DOCUMENTS[i],nomOriginal:s.nomOriginal.trim(),projetId:s.projetId,categorie:s.categorie,lienProton:s.lienProton,notes:s.notes||''};
+  } else {
+    DOCUMENTS.push({id:'d_'+Date.now(),nomOriginal:s.nomOriginal.trim(),projetId:s.projetId,categorie:s.categorie,lienProton:s.lienProton,notes:s.notes||'',createdAt:fmtIso(new Date())});
+  }
+  saveDocs(); closeDocModal(); renderDocList();
+  toast(id?'Document mis à jour':'Document ajouté');
+}
+function exportDocsCSV(){
+  const headers=['nom_original','projet','categorie','nom_final','lien_proton','date_creation','notes'];
+  const csvEsc=v=>{ const s=String(v??''); return /[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+  const lines=[headers.join(',')];
+  DOCUMENTS.forEach(d=>{
+    const proj=PROJECTS.find(p=>p.id===d.projetId);
+    const cat=DOC_CATEGORIES.find(c=>c.key===d.categorie);
+    const name=generateFileName({nomOriginal:d.nomOriginal,projetId:d.projetId,categorie:d.categorie});
+    lines.push([csvEsc(d.nomOriginal||''),csvEsc(proj?proj.title:''),csvEsc(cat?cat.label:d.categorie||''),csvEsc(name),csvEsc(d.lienProton||''),csvEsc(d.createdAt||''),csvEsc(d.notes||'')].join(','));
+  });
+  const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='documents_lili_'+fmtIso(new Date())+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  toast('Export : '+DOCUMENTS.length+' document'+(DOCUMENTS.length>1?'s':''));
 }
 
 /* ===== KANBAN ===== */
@@ -918,6 +1116,17 @@ const KANBAN_STATUSES=[
   { key:'done',      label:'Terminé',  cls:'k-done' },
   { key:'deposited', label:'Déposé',   cls:'k-deposited' }
 ];
+const LS_DOCS='lili-mallette-docs-v1';
+function saveDocs(){ try{ localStorage.setItem(LS_DOCS, JSON.stringify(DOCUMENTS)); }catch(e){} }
+function loadDocs(){
+  try{
+    const raw=localStorage.getItem(LS_DOCS);
+    if(!raw) return;
+    const arr=JSON.parse(raw);
+    if(Array.isArray(arr)){ DOCUMENTS.length=0; arr.forEach(d=>DOCUMENTS.push(d)); }
+  }catch(e){}
+}
+
 const LS_TASKS='lili-mallette-tasks-v1';
 let TASKS=[];
 let kCat='tous';
@@ -1105,7 +1314,11 @@ document.getElementById('search').addEventListener('input',()=>{
 document.getElementById('menu-toggle').addEventListener('click',()=>{
   document.getElementById('sidebar').classList.toggle('open');
 });
-document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape') return;
+  if(document.getElementById('doc-overlay').classList.contains('open')) closeDocModal();
+  else closeModal();
+});
 
 /* ===== drag & resize des barres du Calendrier ===== */
 let _ganttDrag=null;
@@ -1178,6 +1391,13 @@ document.getElementById('nav-count-proj').textContent=PROJECTS.length;
 loadState();
 loadTeam();
 loadTasks();
+loadDocs();
+(function(){
+  const n=document.getElementById('doc-new-btn');
+  if(n) n.addEventListener('click',()=>openDocModal(null));
+  const c=document.getElementById('doc-csv-btn');
+  if(c) c.addEventListener('click',exportDocsCSV);
+})();
 (function(){ const b=document.getElementById('invite-btn'); if(b) b.addEventListener('click',showInviteForm); })();
 (function(){ const b=document.getElementById('task-new-btn'); if(b) b.addEventListener('click',()=>openTaskForm(null)); })();
 buildFilterbar();

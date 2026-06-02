@@ -141,6 +141,25 @@
           </div>
         </div>
         <div class="panel" id="ds-panel" style="padding:20px"></div>
+
+        <div class="page-title-row" style="margin-top:36px">
+          <div>
+            <h1 class="title" style="font-size:24px">Mes documents</h1>
+            <div class="subtitle">Index normalisé. Le nom de fichier est généré automatiquement à partir du projet et de la catégorie.</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn" id="doc-csv-btn">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+              Exporter en CSV
+            </button>
+            <button class="btn primary" id="doc-new-btn">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
+              Nouveau document
+            </button>
+          </div>
+        </div>
+        <div class="filterbar" id="doc-filterbar"></div>
+        <div class="proj-grid" id="doc-grid"></div>
       </section>
 
       <!-- ============ KANBAN ============ -->
@@ -192,6 +211,22 @@
 </div>
 
 <!-- ===================== PROJECT MODAL ===================== -->
+<!-- ===================== DOCUMENT MODAL (5 étapes) ===================== -->
+<div class="overlay" id="doc-overlay">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-head">
+      <div>
+        <h2 id="doc-m-title">Nouveau document</h2>
+        <div class="mh-file" id="doc-m-sub">Renseignez les 5 étapes</div>
+      </div>
+      <button class="x-btn" id="doc-m-close" aria-label="Fermer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="doc-m-body" style="max-height:72vh"></div>
+  </div>
+</div>
+
 <div class="overlay" id="overlay">
   <div class="modal">
     <div class="modal-head">

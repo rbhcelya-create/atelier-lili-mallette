@@ -860,6 +860,50 @@ h1.title{
   .kanban{grid-template-columns:1fr}
 }
 
+/* Documents — module 5 étapes */
+.doc-step{
+  display:flex;gap:14px;align-items:flex-start;
+  padding:14px 16px;border:1px solid var(--line);border-radius:var(--radius-sm);
+  margin-bottom:11px;background:var(--surface-2);
+}
+.doc-step .step-num{
+  width:28px;height:28px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12.5px;font-weight:700;color:var(--ink-2);
+  background:var(--surface);border:1.5px solid var(--line);
+}
+.doc-step .doc-step-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.doc-step .doc-step-body input,
+.doc-step .doc-step-body select,
+.doc-step .doc-step-body textarea{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);
+  padding:9px 12px;font-family:inherit;font-size:14px;color:var(--ink);width:100%;
+}
+.doc-step .doc-step-body textarea{resize:vertical;min-height:50px}
+.doc-step .doc-step-body input:focus,
+.doc-step .doc-step-body select:focus,
+.doc-step .doc-step-body textarea:focus{
+  outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);
+}
+.doc-name-preview{
+  flex:1 1 280px;background:var(--cream);border:1px dashed var(--line);
+  border-radius:var(--radius-sm);padding:11px 14px;
+  font-family:'Source Sans 3',ui-monospace,monospace;font-size:13.5px;
+  color:var(--ink);word-break:break-all;
+}
+.doc-name-preview.empty{color:var(--ink-3);font-style:italic}
+.doc-modal-foot{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  margin-top:8px;padding-top:14px;border-top:1px solid var(--line);
+}
+.badge.doc-cat-images{background:var(--sage-soft);color:var(--sage)}
+.badge.doc-cat-video{background:var(--accent-soft);color:var(--accent-dark)}
+.badge.doc-cat-texte{background:#DCE3EC;color:var(--navy)}
+.badge.doc-cat-audio{background:var(--gold-soft);color:var(--gold)}
+.doc-card .pc-foot{font-size:11.5px}
+.doc-proton-link{color:var(--accent-dark);text-decoration:none;border-bottom:1px solid var(--accent-soft);font-weight:600}
+.doc-proton-link:hover{border-color:var(--accent)}
+
 /* responsive */
 @media (max-width:1080px){
   .stat-row{grid-template-columns:repeat(2,1fr)}
