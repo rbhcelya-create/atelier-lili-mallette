@@ -225,15 +225,6 @@ h1.title{
 .chip .dot{width:7px;height:7px;border-radius:50%}
 .chip .c-count{opacity:.6;font-weight:600}
 .filterbar .divider{width:1px;height:20px;background:var(--line);margin:0 4px}
-.filterbar-label{
-  font-size:11px;font-weight:700;color:var(--ink-3);
-  text-transform:uppercase;letter-spacing:.05em;margin-right:4px;
-}
-.chip-dot{
-  width:8px;height:8px;border-radius:50%;display:inline-block;
-  margin-right:5px;vertical-align:middle;flex-shrink:0;
-}
-.chip.chip-who{display:inline-flex;align-items:center}
 
 /* ============================================================
    PROJECT CARDS
@@ -847,9 +838,33 @@ h1.title{
 /* Colonne Archives : ton légèrement plus discret pour signaler la mise au repos */
 .kanban-col[data-status="archived"]{background:var(--cream);opacity:.85}
 .kanban-col[data-status="archived"] .k-card{background:var(--surface-2)}
-/* Espace réduit entre les 2 lignes de filtres du Kanban */
-#k-filterbar{margin-bottom:8px}
-#k-filterbar-who{margin-bottom:18px}
+/* Panneau de filtres Kanban — dropdowns labellisés (style inspiré
+   d'un outil de tâches type Asana / ClickUp) */
+.k-filters{
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:14px;box-shadow:var(--shadow-sm);
+  padding:18px 22px;margin-bottom:10px;
+  display:grid;grid-template-columns:repeat(3,1fr);gap:22px;
+}
+.k-filter-field{display:flex;flex-direction:column;gap:7px;min-width:0}
+.k-filter-label{
+  font-size:11px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink-3);
+}
+.k-filter-field select{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);
+  padding:10px 14px;font-family:inherit;font-size:14px;color:var(--ink);width:100%;
+  cursor:pointer;appearance:auto;
+}
+.k-filter-field select:focus{
+  outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);
+}
+.k-count{
+  font-size:13.5px;color:var(--ink-3);margin-bottom:14px;font-weight:500;
+}
+@media (max-width:880px){
+  .k-filters{grid-template-columns:1fr}
+}
 .k-col-body{padding:10px;display:flex;flex-direction:column;gap:9px;flex:1}
 .k-col-body .empty-note{margin:0;font-size:12px;padding:10px}
 .k-card{

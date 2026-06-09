@@ -1321,6 +1321,7 @@ function loadDocs(){
 
 const LS_TASKS='lili-mallette-tasks-v1';
 let TASKS=[];
+let kProj='tous';
 let kCat='tous';
 let kWho='tous';
 function saveTasks(){ try{ localStorage.setItem(LS_TASKS, JSON.stringify(TASKS)); }catch(e){} }
@@ -1334,32 +1335,43 @@ function loadTasks(){
 }
 function renderKanban(){
   const q=topQ();
-  /* Filterbar 1 — catégorie (Balados / Vidéos / Spectacles / Fiches) */
-  const counts={tous:TASKS.length};
-  LIVRABLES.forEach(L=>{ counts[L.key]=TASKS.filter(t=>t.category===L.key).length; });
-  const fb=document.getElementById('k-filterbar');
-  if(fb){
-    fb.innerHTML=`<span class="filterbar-label">Catégorie</span>`+
-      `<button class="chip ${kCat==='tous'?'active':''}" data-kcat="tous">Toutes ${TASKS.length?`<span class="c-count">${TASKS.length}</span>`:''}</button>`+
-      LIVRABLES.map(L=>`<button class="chip ${kCat===L.key?'active':''}" data-kcat="${esc(L.key)}">${esc(L.label)} <span class="c-count">${counts[L.key]||0}</span></button>`).join('');
-    fb.querySelectorAll('.chip[data-kcat]').forEach(ch=>ch.addEventListener('click',()=>{ kCat=ch.dataset.kcat; renderKanban(); }));
+  /* Panneau de filtres — 3 dropdowns : Projet, Responsable, Catégorie */
+  const filters=document.getElementById('k-filters');
+  if(filters){
+    const projOpts=`<option value="tous">Tous les projets</option>`+
+      PROJECTS.map(p=>`<option value="${esc(p.id)}"${p.id===kProj?' selected':''}>${esc(p.title)}</option>`).join('');
+    const whoOpts=`<option value="tous">Tous</option>`+
+      TEAM.map(m=>`<option value="${esc(m.id)}"${m.id===kWho?' selected':''}>${esc(m.name)}</option>`).join('')+
+      `<option value="none"${kWho==='none'?' selected':''}>Non assigné</option>`;
+    const catOpts=`<option value="tous">Toutes</option>`+
+      LIVRABLES.map(L=>`<option value="${esc(L.key)}"${L.key===kCat?' selected':''}>${esc(L.label)}</option>`).join('');
+    filters.innerHTML=`
+      <div class="k-filter-field">
+        <label class="k-filter-label" for="k-f-proj">Projet</label>
+        <select id="k-f-proj">${projOpts}</select>
+      </div>
+      <div class="k-filter-field">
+        <label class="k-filter-label" for="k-f-who">Responsable</label>
+        <select id="k-f-who">${whoOpts}</select>
+      </div>
+      <div class="k-filter-field">
+        <label class="k-filter-label" for="k-f-cat">Catégorie</label>
+        <select id="k-f-cat">${catOpts}</select>
+      </div>`;
+    /* Sélectionne la valeur courante (Firefox parfois ne respecte pas l'attr `selected`) */
+    document.getElementById('k-f-proj').value=kProj;
+    document.getElementById('k-f-who').value=kWho;
+    document.getElementById('k-f-cat').value=kCat;
+    document.getElementById('k-f-proj').addEventListener('change',e=>{ kProj=e.target.value; renderKanban(); });
+    document.getElementById('k-f-who').addEventListener('change',e=>{ kWho=e.target.value; renderKanban(); });
+    document.getElementById('k-f-cat').addEventListener('change',e=>{ kCat=e.target.value; renderKanban(); });
   }
-  /* Filterbar 2 — assigné à (membre d'équipe + non assigné) */
-  const whoCounts={tous:TASKS.length, none:TASKS.filter(t=>!t.assignee).length};
-  TEAM.forEach(m=>{ whoCounts[m.id]=TASKS.filter(t=>t.assignee===m.id).length; });
-  const fbw=document.getElementById('k-filterbar-who');
-  if(fbw){
-    fbw.innerHTML=`<span class="filterbar-label">Assigné à</span>`+
-      `<button class="chip ${kWho==='tous'?'active':''}" data-kwho="tous">Tous <span class="c-count">${whoCounts.tous}</span></button>`+
-      TEAM.map(m=>`<button class="chip chip-who ${kWho===m.id?'active':''}" data-kwho="${esc(m.id)}"><span class="chip-dot" style="background:${m.color}"></span>${esc(m.name)} <span class="c-count">${whoCounts[m.id]||0}</span></button>`).join('')+
-      `<button class="chip ${kWho==='none'?'active':''}" data-kwho="none">Non assigné <span class="c-count">${whoCounts.none}</span></button>`;
-    fbw.querySelectorAll('.chip[data-kwho]').forEach(ch=>ch.addEventListener('click',()=>{ kWho=ch.dataset.kwho; renderKanban(); }));
-  }
-  /* Tâches filtrées (catégorie + personne + recherche globale) */
+  /* Tâches filtrées (projet + responsable + catégorie + recherche globale) */
   let list=TASKS.slice();
-  if(kCat!=='tous') list=list.filter(t=>t.category===kCat);
+  if(kProj!=='tous') list=list.filter(t=>t.projectId===kProj);
   if(kWho==='none') list=list.filter(t=>!t.assignee);
   else if(kWho!=='tous') list=list.filter(t=>t.assignee===kWho);
+  if(kCat!=='tous') list=list.filter(t=>t.category===kCat);
   if(q){
     list=list.filter(t=>{
       const m=t.assignee?memberById(t.assignee):null;
@@ -1369,6 +1381,9 @@ function renderKanban(){
     });
   }
   list.sort((a,b)=>(a.deadline||'').localeCompare(b.deadline||''));
+  /* Compteur de tâches (post-filtre) */
+  const cntEl=document.getElementById('k-count');
+  if(cntEl) cntEl.textContent=list.length+' tâche'+(list.length>1?'s':'');
   /* Colonnes */
   const today=new Date(); today.setHours(0,0,0,0);
   document.getElementById('kanban').innerHTML=KANBAN_STATUSES.map(col=>{
