@@ -812,18 +812,18 @@ h1.title{
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
-/* kanban */
+/* kanban — 5 colonnes côte-à-côte sur desktop */
 .kanban{
-  display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-top:6px;
+  display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:6px;
 }
 .kanban-col{
   background:var(--surface-2);border:1px solid var(--line);
   border-radius:var(--radius);min-height:200px;display:flex;flex-direction:column;
 }
 .k-col-head{
-  padding:10px 13px;font-size:12px;font-weight:700;letter-spacing:.04em;
+  padding:10px 12px;font-size:11.5px;font-weight:700;letter-spacing:.04em;
   text-transform:uppercase;color:var(--ink-2);
-  border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;
+  border-bottom:1px solid var(--line);display:flex;align-items:center;gap:6px;
 }
 .k-col-head .k-col-count{
   margin-left:auto;font-size:11px;font-weight:700;
@@ -865,7 +865,7 @@ h1.title{
 @media (max-width:880px){
   .k-filters{grid-template-columns:1fr}
 }
-.k-col-body{padding:10px;display:flex;flex-direction:column;gap:9px;flex:1}
+.k-col-body{padding:8px;display:flex;flex-direction:column;gap:8px;flex:1}
 .k-col-body .empty-note{margin:0;font-size:12px;padding:10px}
 .k-card{
   background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);
@@ -884,13 +884,15 @@ h1.title{
 .k-card-date.warn{color:var(--accent)}
 .k-card-jalon{font-size:11.5px;color:var(--ink-3);display:flex;align-items:center;gap:5px}
 .k-card-link{align-self:flex-start;padding:4px 9px;font-size:11.5px;text-decoration:none}
-@media (max-width:1280px){
+/* 5 colonnes maintenues le plus longtemps possible — on tolère que
+   chaque colonne devienne plus étroite plutôt que de wrap sur 2 lignes. */
+@media (max-width:980px){
   .kanban{grid-template-columns:repeat(3,1fr)}
 }
-@media (max-width:880px){
+@media (max-width:760px){
   .kanban{grid-template-columns:repeat(2,1fr)}
 }
-@media (max-width:560px){
+@media (max-width:520px){
   .kanban{grid-template-columns:1fr}
 }
 
