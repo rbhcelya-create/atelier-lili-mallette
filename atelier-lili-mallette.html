@@ -11,6 +11,27 @@
 </head>
 <body>
 
+<!-- ===================== ÉCRAN DE CONNEXION ===================== -->
+<div class="auth-screen" id="auth-screen">
+  <form class="auth-card" id="auth-form" autocomplete="off">
+    <div class="auth-brand">
+      <div class="auth-logo">L'Atelier</div>
+      <div class="auth-tagline">Outil de gestion · Lili Mallette</div>
+    </div>
+    <label class="auth-field">
+      <span>Identifiant</span>
+      <input id="auth-id" type="text" autocomplete="username" required>
+    </label>
+    <label class="auth-field">
+      <span>Mot de passe</span>
+      <input id="auth-pwd" type="password" autocomplete="current-password" required>
+    </label>
+    <button type="submit" class="btn primary auth-submit">Se connecter</button>
+    <div class="auth-err" id="auth-err"></div>
+    <div class="auth-note">Accès réservé à l'équipe de production</div>
+  </form>
+</div>
+
 <div class="app">
 
   <!-- ===================== SIDEBAR ===================== -->
@@ -72,6 +93,9 @@
         <div class="n">Bruno Lefebvre</div>
         <div class="r">Réalisation sonore & musicale · Admin</div>
       </div>
+      <button class="sb-logout" id="logout-btn" title="Se déconnecter" aria-label="Se déconnecter">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 12H3M7 8l-4 4 4 4"/><path d="M21 4v16"/></svg>
+      </button>
     </div>
   </aside>
 

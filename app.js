@@ -4,6 +4,68 @@
    Pipeline d'après le schéma client.
    ================================================================= */
 
+/* ===== AUTHENTIFICATION (cosmétique)
+   ATTENTION : c'est une protection visuelle uniquement. Le code étant
+   côté client, n'importe qui peut contourner via les outils dev du
+   navigateur. Pour une vraie auth, brancher Supabase plus tard.
+   Pour changer les identifiants : modifier les valeurs ci-dessous et
+   redéployer. */
+const AUTH = {
+  identifiant: 'lili',
+  motDePasse:  'lilimallette2026'
+};
+const LS_AUTH = 'lili-mallette-auth-v1';
+function isAuthed(){ try{ return localStorage.getItem(LS_AUTH)==='1'; }catch(e){ return false; } }
+function setAuthed(v){
+  try{ if(v) localStorage.setItem(LS_AUTH,'1'); else localStorage.removeItem(LS_AUTH); }catch(e){}
+}
+function showAuthScreen(){
+  const sc=document.getElementById('auth-screen');
+  if(!sc) return;
+  sc.classList.remove('hidden');
+  const id=document.getElementById('auth-id'), pwd=document.getElementById('auth-pwd'), err=document.getElementById('auth-err');
+  if(id) id.value=''; if(pwd) pwd.value=''; if(err) err.textContent='';
+  setTimeout(()=>{ if(id) id.focus(); },30);
+}
+function hideAuthScreen(){
+  const sc=document.getElementById('auth-screen');
+  if(sc) sc.classList.add('hidden');
+}
+function tryLogin(){
+  const id=(document.getElementById('auth-id').value||'').trim();
+  const pwd=document.getElementById('auth-pwd').value||'';
+  const err=document.getElementById('auth-err');
+  if(id===AUTH.identifiant && pwd===AUTH.motDePasse){
+    setAuthed(true); hideAuthScreen();
+    err.textContent='';
+  } else {
+    err.textContent='Identifiant ou mot de passe incorrect';
+    document.getElementById('auth-pwd').value='';
+    document.getElementById('auth-pwd').focus();
+  }
+}
+function logout(){
+  setAuthed(false);
+  /* Recharge pour repartir d'un état propre — évite que des écouteurs en
+     double s'accumulent après plusieurs logout/login. */
+  location.reload();
+}
+/* Branche le formulaire dès maintenant : si l'utilisateur n'est pas
+   identifié, l'écran reste visible ; sinon on le masque. */
+(function bootAuth(){
+  if(typeof document==='undefined') return;
+  const wire=()=>{
+    const form=document.getElementById('auth-form');
+    if(form) form.addEventListener('submit',e=>{ e.preventDefault(); tryLogin(); });
+    const logoutBtn=document.getElementById('logout-btn');
+    if(logoutBtn) logoutBtn.addEventListener('click',logout);
+    if(isAuthed()) hideAuthScreen();
+    else showAuthScreen();
+  };
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',wire);
+  else wire();
+})();
+
 const TEAM = [
   { id:'lise',  name:'Lise Martin',         role:'Créatrice & narratrice',        access:'admin',   color:'#C04A3F' },
   { id:'fred',  name:'Frédérick Rouleau',   role:'Univers visuel',                access:'editeur', color:'#6E8E63' },
