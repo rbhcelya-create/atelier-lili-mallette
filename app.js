@@ -1495,7 +1495,7 @@ function saveTaskFromForm(id){
 }
 
 /* ===== NAV ===== */
-const VIEW_NAMES={dashboard:'Tableau de bord',projets:'Projets',docs:'Documents',kanban:'Kanban',gantt:'Calendrier',equipe:'Équipe'};
+const VIEW_NAMES={dashboard:'Tableau de bord',projets:'Projets',docs:'Documents',kanban:'Tâches',gantt:'Calendrier',equipe:'Équipe'};
 const SEARCH_PLACEHOLDER={dashboard:'Rechercher un projet…',projets:'Rechercher un projet…',docs:'Rechercher un document…',kanban:'Rechercher une tâche…',gantt:'Rechercher un projet…',equipe:'Rechercher un membre…'};
 function switchView(v){
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
