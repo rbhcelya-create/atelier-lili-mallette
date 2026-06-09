@@ -11,8 +11,8 @@
    Pour changer les identifiants : modifier les valeurs ci-dessous et
    redéployer. */
 const AUTH = {
-  identifiant: 'lili',
-  motDePasse:  'lilimallette2026'
+  identifiant: 'liliatelier',
+  motDePasse:  '123456'
 };
 const LS_AUTH = 'lili-mallette-auth-v1';
 function isAuthed(){ try{ return localStorage.getItem(LS_AUTH)==='1'; }catch(e){ return false; } }
