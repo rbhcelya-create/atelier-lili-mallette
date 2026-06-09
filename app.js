@@ -1303,7 +1303,8 @@ const KANBAN_STATUSES=[
   { key:'todo',      label:'À faire',  cls:'k-todo' },
   { key:'doing',     label:'En cours', cls:'k-doing' },
   { key:'done',      label:'Terminé',  cls:'k-done' },
-  { key:'deposited', label:'Déposé',   cls:'k-deposited' }
+  { key:'deposited', label:'Déposé',   cls:'k-deposited' },
+  { key:'archived',  label:'Archives', cls:'k-archived' }
 ];
 const LS_DOCS='lili-mallette-docs-v1';
 function saveDocs(){ try{ localStorage.setItem(LS_DOCS, JSON.stringify(DOCUMENTS)); }catch(e){} }
