@@ -1324,6 +1324,7 @@ let TASKS=[];
 let kProj='tous';
 let kCat='tous';
 let kWho='tous';
+let kStatus='tous';
 function saveTasks(){ try{ localStorage.setItem(LS_TASKS, JSON.stringify(TASKS)); }catch(e){} }
 function loadTasks(){
   try{
@@ -1345,6 +1346,8 @@ function renderKanban(){
       `<option value="none"${kWho==='none'?' selected':''}>Non assigné</option>`;
     const catOpts=`<option value="tous">Toutes</option>`+
       LIVRABLES.map(L=>`<option value="${esc(L.key)}"${L.key===kCat?' selected':''}>${esc(L.label)}</option>`).join('');
+    const statusOpts=`<option value="tous">Tous</option>`+
+      KANBAN_STATUSES.map(s=>`<option value="${esc(s.key)}"${s.key===kStatus?' selected':''}>${esc(s.label)}</option>`).join('');
     filters.innerHTML=`
       <div class="k-filter-field">
         <label class="k-filter-label" for="k-f-proj">Projet</label>
@@ -1357,21 +1360,28 @@ function renderKanban(){
       <div class="k-filter-field">
         <label class="k-filter-label" for="k-f-cat">Catégorie</label>
         <select id="k-f-cat">${catOpts}</select>
+      </div>
+      <div class="k-filter-field">
+        <label class="k-filter-label" for="k-f-status">Statut</label>
+        <select id="k-f-status">${statusOpts}</select>
       </div>`;
     /* Sélectionne la valeur courante (Firefox parfois ne respecte pas l'attr `selected`) */
     document.getElementById('k-f-proj').value=kProj;
     document.getElementById('k-f-who').value=kWho;
     document.getElementById('k-f-cat').value=kCat;
+    document.getElementById('k-f-status').value=kStatus;
     document.getElementById('k-f-proj').addEventListener('change',e=>{ kProj=e.target.value; renderKanban(); });
     document.getElementById('k-f-who').addEventListener('change',e=>{ kWho=e.target.value; renderKanban(); });
     document.getElementById('k-f-cat').addEventListener('change',e=>{ kCat=e.target.value; renderKanban(); });
+    document.getElementById('k-f-status').addEventListener('change',e=>{ kStatus=e.target.value; renderKanban(); });
   }
-  /* Tâches filtrées (projet + responsable + catégorie + recherche globale) */
+  /* Tâches filtrées (projet + responsable + catégorie + statut + recherche globale) */
   let list=TASKS.slice();
   if(kProj!=='tous') list=list.filter(t=>t.projectId===kProj);
   if(kWho==='none') list=list.filter(t=>!t.assignee);
   else if(kWho!=='tous') list=list.filter(t=>t.assignee===kWho);
   if(kCat!=='tous') list=list.filter(t=>t.category===kCat);
+  if(kStatus!=='tous') list=list.filter(t=>t.status===kStatus);
   if(q){
     list=list.filter(t=>{
       const m=t.assignee?memberById(t.assignee):null;
@@ -1384,9 +1394,14 @@ function renderKanban(){
   /* Compteur de tâches (post-filtre) */
   const cntEl=document.getElementById('k-count');
   if(cntEl) cntEl.textContent=list.length+' tâche'+(list.length>1?'s':'');
-  /* Colonnes */
+  /* Colonnes — si un statut est filtré, on n'affiche que la colonne
+     correspondante (les autres seraient nécessairement vides). */
   const today=new Date(); today.setHours(0,0,0,0);
-  document.getElementById('kanban').innerHTML=KANBAN_STATUSES.map(col=>{
+  const visibleStatuses=(kStatus==='tous')?KANBAN_STATUSES:KANBAN_STATUSES.filter(s=>s.key===kStatus);
+  const kanbanEl=document.getElementById('kanban');
+  /* Layout adaptatif : 1 seule colonne quand on filtre, sinon 5 cols */
+  kanbanEl.style.gridTemplateColumns = (kStatus==='tous')?'':'1fr';
+  kanbanEl.innerHTML=visibleStatuses.map(col=>{
     const cards=list.filter(t=>t.status===col.key);
     return `<div class="kanban-col" data-status="${esc(col.key)}">
       <div class="k-col-head ${col.cls}">${col.label} <span class="k-col-count">${cards.length}</span></div>

@@ -844,7 +844,7 @@ h1.title{
   background:var(--surface);border:1px solid var(--line);
   border-radius:14px;box-shadow:var(--shadow-sm);
   padding:18px 22px;margin-bottom:10px;
-  display:grid;grid-template-columns:repeat(3,1fr);gap:22px;
+  display:grid;grid-template-columns:repeat(4,1fr);gap:18px;
 }
 .k-filter-field{display:flex;flex-direction:column;gap:7px;min-width:0}
 .k-filter-label{
@@ -862,7 +862,10 @@ h1.title{
 .k-count{
   font-size:13.5px;color:var(--ink-3);margin-bottom:14px;font-weight:500;
 }
-@media (max-width:880px){
+@media (max-width:1080px){
+  .k-filters{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:560px){
   .k-filters{grid-template-columns:1fr}
 }
 .k-col-body{padding:8px;display:flex;flex-direction:column;gap:8px;flex:1}
