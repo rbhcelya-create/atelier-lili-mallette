@@ -1299,11 +1299,13 @@ function exportDocsCSV(){
 }
 
 /* ===== KANBAN ===== */
+/* La clé interne `deposited` est conservée pour compat des tâches déjà
+   sauvegardées en localStorage. Seul le libellé affiché a changé. */
 const KANBAN_STATUSES=[
   { key:'todo',      label:'À faire',  cls:'k-todo' },
   { key:'doing',     label:'En cours', cls:'k-doing' },
   { key:'done',      label:'Terminé',  cls:'k-done' },
-  { key:'deposited', label:'Déposé',   cls:'k-deposited' },
+  { key:'deposited', label:'En ligne', cls:'k-deposited' },
   { key:'archived',  label:'Archives', cls:'k-archived' }
 ];
 const LS_DOCS='lili-mallette-docs-v1';
@@ -1320,6 +1322,7 @@ function loadDocs(){
 const LS_TASKS='lili-mallette-tasks-v1';
 let TASKS=[];
 let kCat='tous';
+let kWho='tous';
 function saveTasks(){ try{ localStorage.setItem(LS_TASKS, JSON.stringify(TASKS)); }catch(e){} }
 function loadTasks(){
   try{
@@ -1331,18 +1334,32 @@ function loadTasks(){
 }
 function renderKanban(){
   const q=topQ();
-  /* Filterbar (catégorie) */
+  /* Filterbar 1 — catégorie (Balados / Vidéos / Spectacles / Fiches) */
   const counts={tous:TASKS.length};
   LIVRABLES.forEach(L=>{ counts[L.key]=TASKS.filter(t=>t.category===L.key).length; });
   const fb=document.getElementById('k-filterbar');
   if(fb){
-    fb.innerHTML=`<button class="chip ${kCat==='tous'?'active':''}" data-kcat="tous">Toutes ${TASKS.length?`<span class="c-count">${TASKS.length}</span>`:''}</button>`+
+    fb.innerHTML=`<span class="filterbar-label">Catégorie</span>`+
+      `<button class="chip ${kCat==='tous'?'active':''}" data-kcat="tous">Toutes ${TASKS.length?`<span class="c-count">${TASKS.length}</span>`:''}</button>`+
       LIVRABLES.map(L=>`<button class="chip ${kCat===L.key?'active':''}" data-kcat="${esc(L.key)}">${esc(L.label)} <span class="c-count">${counts[L.key]||0}</span></button>`).join('');
     fb.querySelectorAll('.chip[data-kcat]').forEach(ch=>ch.addEventListener('click',()=>{ kCat=ch.dataset.kcat; renderKanban(); }));
   }
-  /* Tâches filtrées */
+  /* Filterbar 2 — assigné à (membre d'équipe + non assigné) */
+  const whoCounts={tous:TASKS.length, none:TASKS.filter(t=>!t.assignee).length};
+  TEAM.forEach(m=>{ whoCounts[m.id]=TASKS.filter(t=>t.assignee===m.id).length; });
+  const fbw=document.getElementById('k-filterbar-who');
+  if(fbw){
+    fbw.innerHTML=`<span class="filterbar-label">Assigné à</span>`+
+      `<button class="chip ${kWho==='tous'?'active':''}" data-kwho="tous">Tous <span class="c-count">${whoCounts.tous}</span></button>`+
+      TEAM.map(m=>`<button class="chip chip-who ${kWho===m.id?'active':''}" data-kwho="${esc(m.id)}"><span class="chip-dot" style="background:${m.color}"></span>${esc(m.name)} <span class="c-count">${whoCounts[m.id]||0}</span></button>`).join('')+
+      `<button class="chip ${kWho==='none'?'active':''}" data-kwho="none">Non assigné <span class="c-count">${whoCounts.none}</span></button>`;
+    fbw.querySelectorAll('.chip[data-kwho]').forEach(ch=>ch.addEventListener('click',()=>{ kWho=ch.dataset.kwho; renderKanban(); }));
+  }
+  /* Tâches filtrées (catégorie + personne + recherche globale) */
   let list=TASKS.slice();
   if(kCat!=='tous') list=list.filter(t=>t.category===kCat);
+  if(kWho==='none') list=list.filter(t=>!t.assignee);
+  else if(kWho!=='tous') list=list.filter(t=>t.assignee===kWho);
   if(q){
     list=list.filter(t=>{
       const m=t.assignee?memberById(t.assignee):null;
