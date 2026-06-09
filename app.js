@@ -1300,15 +1300,16 @@ function saveDocFromForm(id,s){
   toast(id?'Document mis à jour':'Document ajouté');
 }
 function exportDocsCSV(){
+  /* Séparateur `;` (compatible Excel français), BOM UTF-8, échappement RFC 4180. */
   const headers=['nom_original','projet','categorie','nom_final','lien_dossier','date_creation','notes'];
-  const csvEsc=v=>{ const s=String(v??''); return /[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
-  const lines=[headers.join(',')];
+  const csvEsc=v=>{ const s=String(v??''); return /[";\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+  const lines=[headers.join(';')];
   DOCUMENTS.forEach(d=>{
     const proj=PROJECTS.find(p=>p.id===d.projetId);
     const cat=DOC_CATEGORIES.find(c=>c.key===d.categorie);
     const name=generateFileName({nomOriginal:d.nomOriginal,projetId:d.projetId,categorie:d.categorie});
     const folderUrl=docFolderLink(d);
-    lines.push([csvEsc(d.nomOriginal||''),csvEsc(proj?proj.title:''),csvEsc(cat?cat.label:d.categorie||''),csvEsc(name),csvEsc(folderUrl),csvEsc(d.createdAt||''),csvEsc(d.notes||'')].join(','));
+    lines.push([csvEsc(d.nomOriginal||''),csvEsc(proj?proj.title:''),csvEsc(cat?cat.label:d.categorie||''),csvEsc(name),csvEsc(folderUrl),csvEsc(d.createdAt||''),csvEsc(d.notes||'')].join(';'));
   });
   const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
   const url=URL.createObjectURL(blob);
