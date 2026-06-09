@@ -5,12 +5,12 @@
    ================================================================= */
 
 const TEAM = [
-  { id:'lise',  name:'Lise Martin',         role:'Créatrice & narratrice',        access:'admin',   color:'#C04A3F', initiales:'LM' },
-  { id:'fred',  name:'Frédérick Rouleau',   role:'Univers visuel',                access:'editeur', color:'#6E8E63', initiales:'FR' },
-  { id:'bruno', name:'Bruno Lefebvre',      role:'Réalisation sonore & musicale', access:'admin',   color:'#2F4259', initiales:'BL' },
-  { id:'anne',  name:'Anne Kishnapanaïdou', role:'Coordonnatrice',                access:'admin',   color:'#C28A2C', initiales:'AK' },
-  { id:'line',  name:'Line Charlebois',     role:'Fiche pédagogique',             access:'editeur', color:'#8C8270', initiales:'LC' },
-  { id:'ana',   name:'Ana de Rosario',      role:'Marketing & réseaux sociaux',   access:'editeur', color:'#B07560', initiales:'AR' }
+  { id:'lise',  name:'Lise Martin',         role:'Créatrice & narratrice',        access:'admin',   color:'#C04A3F' },
+  { id:'fred',  name:'Frédérick Rouleau',   role:'Univers visuel',                access:'editeur', color:'#6E8E63' },
+  { id:'bruno', name:'Bruno Lefebvre',      role:'Réalisation sonore & musicale', access:'admin',   color:'#2F4259' },
+  { id:'anne',  name:'Anne Kishnapanaïdou', role:'Coordonnatrice',                access:'admin',   color:'#C28A2C' },
+  { id:'line',  name:'Line Charlebois',     role:'Fiche pédagogique',             access:'editeur', color:'#8C8270' },
+  { id:'ana',   name:'Ana de Rosario',      role:'Marketing & réseaux sociaux',   access:'editeur', color:'#B07560' }
 ];
 const memberById = id => TEAM.find(m=>m.id===id) || {name:'?',color:'#8C8270'};
 const initials = n => n.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
@@ -200,25 +200,20 @@ const PROJECTS = [
 ];
 
 const DOC_CATEGORIES = [
-  { key:'images', label:'Images', code:'IMG'   },
-  { key:'video',  label:'Vidéo',  code:'VIDEO' },
-  { key:'texte',  label:'Texte',  code:'TXT'   },
-  { key:'audio',  label:'Audio',  code:'AUDIO' }
+  { key:'images', label:'Images', code:'IMG' },
+  { key:'video',  label:'Vidéo',  code:'VID' },
+  { key:'texte',  label:'Texte',  code:'TXT' },
+  { key:'audio',  label:'Audio',  code:'AUD' }
 ];
 /* Documents — le lien Proton n'est plus stocké par document : il est récupéré
    dynamiquement via docFolderLink() à partir de project.folderLinks[categorie].
-   Le format du nom suit la convention client :
-     YYYY-MM-DD_<Sujet>_<CAT>_<II>_v_<NN>
-   où :
-     - <Sujet>    = nomOriginal (descriptif tapé par l'utilisateur)
-     - <CAT>      = IMG / VIDEO / TXT / AUDIO
-     - <II>       = initiales du membre d'équipe (authorId → TEAM.initiales)
-     - <NN>       = numéro de version sur 2 chiffres (version, défaut 1) */
+   On garde le champ `lienProton` en option pour compat des anciennes données
+   en localStorage, mais il n'est plus écrit pour les nouveaux documents. */
 const DOCUMENTS = [
-  { id:'d1', nomOriginal:'Filou Texte',                projetId:'p1', categorie:'texte',  authorId:'lise',  version:3, date:'2026-05-12', notes:'Version validée', createdAt:'2026-05-12' },
-  { id:'d2', nomOriginal:'Bernardo Narration',         projetId:'p2', categorie:'audio',  authorId:'bruno', version:1, date:'2026-05-08', notes:'',                createdAt:'2026-05-08' },
-  { id:'d3', nomOriginal:'Geant Youtube',              projetId:'p4', categorie:'video',  authorId:'bruno', version:2, date:'2026-05-23', notes:'Master',          createdAt:'2026-05-04' },
-  { id:'d4', nomOriginal:'Tifi Planches Scenes 1-3',   projetId:'p5', categorie:'images', authorId:'fred',  version:1, date:'2026-06-08', notes:'Approuvées',      createdAt:'2026-06-08' }
+  { id:'d1', nomOriginal:'script v3',               projetId:'p1', categorie:'texte',  notes:'Version validée', createdAt:'2026-05-12' },
+  { id:'d2', nomOriginal:'voix narration bernardo', projetId:'p2', categorie:'audio',  notes:'',                createdAt:'2026-05-08' },
+  { id:'d3', nomOriginal:'montage final',           projetId:'p4', categorie:'video',  notes:'Master',          createdAt:'2026-05-04' },
+  { id:'d4', nomOriginal:'planches scenes 1-3',     projetId:'p5', categorie:'images', notes:'Approuvées',      createdAt:'2026-06-08' }
 ];
 
 const STATUS = {
@@ -249,40 +244,26 @@ const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>
 const isHttpUrl = u => /^https?:\/\//i.test(String(u||'').trim());
 
 /* ----------------------------------------------------------------------
-   Format de nomenclature — convention client (validée 2026-06-09).
-   Exemples réels :
-     2026-05-14_Filou_IMG_FR_v_01
-     2026-05-23_Geant_Youtube_VIDEO_BL_v_02
-     2025-11-09_Geant_TXT_LM_v_01
-     2026-05-27_Grisou-Promo-Spotify_TXT_AR_v_01
-   Format :
-     YYYY-MM-DD_<Sujet>_<CAT>_<II>_v_<NN>
-       - YYYY-MM-DD : date du document (champ `date`, défaut = aujourd'hui)
-       - Sujet      : nomOriginal nettoyé — espaces → underscore, casse et
-                      accents conservés, on garde lettres/chiffres/_/-/+
-       - CAT        : code catégorie (IMG / VIDEO / TXT / AUDIO)
-       - II         : initiales du membre auteur (TEAM.initiales)
-       - NN         : numéro de version sur 2 chiffres
-   Retourne '' si une donnée manque, pour que l'UI affiche un placeholder.
-   Le slug-projet n'apparaît PAS dans le nom : le projet sert uniquement
-   au classement (dossier de destination via folderLinks).
+   À METTRE À JOUR avec le format exact fourni par le client
+   Format provisoire : {slug-projet}_{CAT}_{slug-nom-original}
+     - slug-projet  : titre du projet, accents retirés, minuscules,
+                      caractères non-alphanumériques → tirets
+     - CAT          : code 3 lettres de la catégorie (IMG/VID/TXT/AUD)
+     - slug-nom-original : nom original, accents retirés, minuscules,
+                           caractères non-alphanumériques → underscores
+   Retourne '' si une donnée manque, pour que l'UI puisse afficher un
+   placeholder.
    ---------------------------------------------------------------------- */
-function cleanSujet(s){
-  /* Espaces → _, on garde lettres (incl. accentuées), chiffres, _, -, +.
-     Tout le reste est supprimé. Pas de changement de casse. */
-  return String(s||'').trim().replace(/\s+/g,'_').replace(/[^A-Za-z0-9À-ÿ_\-+]/g,'').replace(/^_+|_+$/g,'');
-}
-function generateFileName({nomOriginal, projetId, categorie, authorId, version, date}){
+function generateFileName({nomOriginal, projetId, categorie}){
   if(!nomOriginal||!projetId||!categorie) return '';
-  const sujet=cleanSujet(nomOriginal);
-  if(!sujet) return '';
+  const proj=PROJECTS.find(p=>p.id===projetId);
+  if(!proj) return '';
+  const strip=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+  const slugProj=strip(proj.title).replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+  const slugOrig=strip(nomOriginal).replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
   const cat=DOC_CATEGORIES.find(c=>c.key===categorie);
   const code=cat?cat.code:'XXX';
-  const member=authorId?TEAM.find(m=>m.id===authorId):null;
-  const init=(member&&member.initiales)?member.initiales:'??';
-  const v=String(Math.max(1,parseInt(version,10)||1)).padStart(2,'0');
-  const d=(date&&/^\d{4}-\d{2}-\d{2}$/.test(date))?date:fmtIso(new Date());
-  return `${d}_${sujet}_${code}_${init}_v_${v}`;
+  return `${slugProj}_${code}_${slugOrig}`;
 }
 /* Lien Proton du dossier de destination, dérivé du projet + catégorie.
    Renseigné une fois par projet/catégorie, réutilisé pour tous les documents
@@ -1030,7 +1011,7 @@ function renderDocList(){
 function renderDocCard(d){
   const proj=PROJECTS.find(p=>p.id===d.projetId);
   const cat=DOC_CATEGORIES.find(c=>c.key===d.categorie);
-  const name=generateFileName({nomOriginal:d.nomOriginal,projetId:d.projetId,categorie:d.categorie,authorId:d.authorId,version:d.version,date:d.date});
+  const name=generateFileName({nomOriginal:d.nomOriginal,projetId:d.projetId,categorie:d.categorie});
   const folderUrl=docFolderLink(d);
   const ok=isHttpUrl(folderUrl);
   return `<article class="proj-card doc-card" data-docid="${esc(d.id)}">
@@ -1050,29 +1031,22 @@ function renderDocCard(d){
 }
 function openDocModal(id){
   const isEdit=!!id;
-  const todayIso=fmtIso(new Date());
-  const d=isEdit?DOCUMENTS.find(x=>x.id===id):{id:null,nomOriginal:'',projetId:'',categorie:'',authorId:'bruno',version:1,date:todayIso,notes:''};
+  const d=isEdit?DOCUMENTS.find(x=>x.id===id):{id:null,nomOriginal:'',projetId:'',categorie:'',notes:''};
   if(isEdit&&!d) return;
   document.getElementById('doc-m-title').textContent=isEdit?'Modifier le document':'Nouveau document';
   document.getElementById('doc-m-sub').textContent=isEdit?'Modifiez puis enregistrez':'Renseignez les 5 étapes — flux automatisé';
   const body=document.getElementById('doc-m-body');
   const projOpts='<option value="">— sélectionnez —</option>'+PROJECTS.map(p=>`<option value="${esc(p.id)}"${p.id===(d.projetId||'')?' selected':''}>${esc(p.title)}</option>`).join('');
   const catChips=DOC_CATEGORIES.map(c=>`<button class="chip ${c.key===d.categorie?'active':''}" data-dform-cat="${esc(c.key)}">${esc(c.label)}</button>`).join('');
-  const authorOpts=TEAM.map(m=>`<option value="${esc(m.id)}"${m.id===(d.authorId||'bruno')?' selected':''}>${esc(m.name)} (${esc(m.initiales||'')})</option>`).join('');
   body.innerHTML=`
     <div class="doc-step"><span class="step-num">1</span><div class="doc-step-body">
-      <div class="field-label">Sujet <span class="field-hint">(ce qui décrit le contenu — espaces remplacés par « _ »)</span></div>
-      <input id="df-nom" placeholder="ex. Geant Youtube · Lili Jeanne Printemps · Grisou face assis triste" value="${esc(d.nomOriginal||'')}">
+      <div class="field-label">Nom original</div>
+      <input id="df-nom" placeholder="ex. bernardo l'éléphanteau" value="${esc(d.nomOriginal||'')}">
     </div></div>
     <div class="doc-step"><span class="step-num">2</span><div class="doc-step-body">
-      <div class="field-label">Projet, catégorie, auteur, date et version</div>
+      <div class="field-label">Projet et catégorie</div>
       <select id="df-proj">${projOpts}</select>
-      <div class="filterbar" id="df-cats" style="margin-top:2px">${catChips}</div>
-      <div class="doc-meta-grid">
-        <label class="doc-meta-field"><span>Auteur</span><select id="df-author">${authorOpts}</select></label>
-        <label class="doc-meta-field"><span>Date</span><input id="df-date" type="date" value="${esc(d.date||todayIso)}"></label>
-        <label class="doc-meta-field"><span>Version</span><input id="df-version" type="number" min="1" step="1" value="${esc(String(d.version||1))}"></label>
-      </div>
+      <div class="filterbar" id="df-cats" style="margin-top:6px">${catChips}</div>
     </div></div>
     <div class="doc-step"><span class="step-num">3</span><div class="doc-step-body">
       <div class="field-label">Nom final (généré automatiquement)</div>
@@ -1105,7 +1079,7 @@ function openDocModal(id){
         <button class="btn primary" id="df-save" disabled>Enregistrer</button>
       </div>
     </div>`;
-  const st={nomOriginal:d.nomOriginal||'',projetId:d.projetId||'',categorie:d.categorie||'',authorId:d.authorId||'bruno',version:d.version||1,date:d.date||todayIso,notes:d.notes||''};
+  const st={nomOriginal:d.nomOriginal||'',projetId:d.projetId||'',categorie:d.categorie||'',notes:d.notes||''};
 
   /* Rendu de la zone Step 4 — adaptatif :
      - si projet+catégorie pas encore choisis → instruction
@@ -1198,9 +1172,6 @@ function openDocModal(id){
     document.querySelectorAll('#df-cats .chip').forEach(c=>c.classList.toggle('active', c.dataset.dformCat===st.categorie));
     renderStep4(); refresh();
   }));
-  document.getElementById('df-author').addEventListener('change',e=>{ st.authorId=e.target.value; refresh(); });
-  document.getElementById('df-date').addEventListener('change',e=>{ st.date=e.target.value||todayIso; refresh(); });
-  document.getElementById('df-version').addEventListener('input',e=>{ const n=parseInt(e.target.value,10); st.version=isNaN(n)||n<1?1:n; refresh(); });
   document.getElementById('df-notes').addEventListener('input',e=>{ st.notes=e.target.value; });
   document.getElementById('df-copy').addEventListener('click',()=>{
     const name=generateFileName(st); if(!name) return;
@@ -1237,46 +1208,25 @@ function saveDocFromForm(id,s){
      via docFolderLink(). On vérifie juste qu'il existe au moment de la sauvegarde. */
   const folderUrl=docFolderLink({projetId:s.projetId,categorie:s.categorie});
   if(!s.nomOriginal.trim()||!s.projetId||!s.categorie||!isHttpUrl(folderUrl)) return;
-  const todayIso=fmtIso(new Date());
-  const payload={
-    nomOriginal:s.nomOriginal.trim(),
-    projetId:s.projetId,
-    categorie:s.categorie,
-    authorId:s.authorId||'bruno',
-    version:Math.max(1,parseInt(s.version,10)||1),
-    date:(s.date&&/^\d{4}-\d{2}-\d{2}$/.test(s.date))?s.date:todayIso,
-    notes:s.notes||''
-  };
   if(id){
     const i=DOCUMENTS.findIndex(x=>x.id===id);
-    if(i>=0) DOCUMENTS[i]={...DOCUMENTS[i],...payload};
+    if(i>=0) DOCUMENTS[i]={...DOCUMENTS[i],nomOriginal:s.nomOriginal.trim(),projetId:s.projetId,categorie:s.categorie,notes:s.notes||''};
   } else {
-    DOCUMENTS.push({id:'d_'+Date.now(),...payload,createdAt:todayIso});
+    DOCUMENTS.push({id:'d_'+Date.now(),nomOriginal:s.nomOriginal.trim(),projetId:s.projetId,categorie:s.categorie,notes:s.notes||'',createdAt:fmtIso(new Date())});
   }
   saveDocs(); closeDocModal(); renderDocList();
   toast(id?'Document mis à jour':'Document ajouté');
 }
 function exportDocsCSV(){
-  const headers=['nom_final','sujet','projet','categorie','auteur','date','version','lien_dossier','notes'];
+  const headers=['nom_original','projet','categorie','nom_final','lien_dossier','date_creation','notes'];
   const csvEsc=v=>{ const s=String(v??''); return /[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
   const lines=[headers.join(',')];
   DOCUMENTS.forEach(d=>{
     const proj=PROJECTS.find(p=>p.id===d.projetId);
     const cat=DOC_CATEGORIES.find(c=>c.key===d.categorie);
-    const author=d.authorId?TEAM.find(m=>m.id===d.authorId):null;
-    const name=generateFileName({nomOriginal:d.nomOriginal,projetId:d.projetId,categorie:d.categorie,authorId:d.authorId,version:d.version,date:d.date});
+    const name=generateFileName({nomOriginal:d.nomOriginal,projetId:d.projetId,categorie:d.categorie});
     const folderUrl=docFolderLink(d);
-    lines.push([
-      csvEsc(name),
-      csvEsc(d.nomOriginal||''),
-      csvEsc(proj?proj.title:''),
-      csvEsc(cat?cat.label:d.categorie||''),
-      csvEsc(author?`${author.name} (${author.initiales||''})`:''),
-      csvEsc(d.date||''),
-      csvEsc(d.version||''),
-      csvEsc(folderUrl),
-      csvEsc(d.notes||'')
-    ].join(','));
+    lines.push([csvEsc(d.nomOriginal||''),csvEsc(proj?proj.title:''),csvEsc(cat?cat.label:d.categorie||''),csvEsc(name),csvEsc(folderUrl),csvEsc(d.createdAt||''),csvEsc(d.notes||'')].join(','));
   });
   const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
   const url=URL.createObjectURL(blob);
