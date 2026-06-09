@@ -184,6 +184,27 @@
         </div>
         <div class="filterbar" id="doc-filterbar"></div>
         <div class="proj-grid" id="doc-grid"></div>
+
+        <!-- ─── Nomenclature client (3e section, indépendante de Mes documents) ─── -->
+        <div class="page-title-row" style="margin-top:36px">
+          <div>
+            <h1 class="title" style="font-size:24px">Nomenclature client</h1>
+            <div class="subtitle">Format fourni par le client — Lili Mallette, juin 2026. Le nom de fichier suit strictement la convention : <code style="font-family:'Source Sans 3',monospace;font-size:12.5px;background:var(--surface-2);padding:1px 6px;border-radius:4px">AAAA-MM-JJ_Sujet_CAT_INITIALES_v_NN</code>.</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn" id="cdoc-csv-btn">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+              Exporter en CSV
+            </button>
+            <button class="btn primary" id="cdoc-new-btn">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
+              Nouveau document
+            </button>
+          </div>
+        </div>
+        <div class="filterbar" id="cdoc-filterbar-cat"></div>
+        <div class="filterbar" id="cdoc-filterbar-who"></div>
+        <div class="proj-grid" id="cdoc-grid"></div>
       </section>
 
       <!-- ============ KANBAN ============ -->
@@ -236,6 +257,22 @@
 </div>
 
 <!-- ===================== PROJECT MODAL ===================== -->
+<!-- ===================== NOMENCLATURE CLIENT MODAL ===================== -->
+<div class="overlay" id="client-doc-overlay">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-head">
+      <div>
+        <h2 id="cdoc-m-title">Nouveau document</h2>
+        <div class="mh-file" id="cdoc-m-sub">Format client — 5 étapes</div>
+      </div>
+      <button class="x-btn" id="cdoc-m-close" aria-label="Fermer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="cdoc-m-body" style="max-height:72vh"></div>
+  </div>
+</div>
+
 <!-- ===================== DOCUMENT MODAL (5 étapes) ===================== -->
 <div class="overlay" id="doc-overlay">
   <div class="modal" style="max-width:680px">

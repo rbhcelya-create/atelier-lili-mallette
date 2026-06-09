@@ -67,12 +67,12 @@ function logout(){
 })();
 
 const TEAM = [
-  { id:'lise',  name:'Lise Martin',         role:'Créatrice & narratrice',        access:'admin',   color:'#C04A3F' },
-  { id:'fred',  name:'Frédérick Rouleau',   role:'Univers visuel',                access:'editeur', color:'#6E8E63' },
-  { id:'bruno', name:'Bruno Lefebvre',      role:'Réalisation sonore & musicale', access:'admin',   color:'#2F4259' },
-  { id:'anne',  name:'Anne Kishnapanaïdou', role:'Coordonnatrice',                access:'admin',   color:'#C28A2C' },
-  { id:'line',  name:'Line Charlebois',     role:'Fiche pédagogique',             access:'editeur', color:'#8C8270' },
-  { id:'ana',   name:'Ana de Rosario',      role:'Marketing & réseaux sociaux',   access:'editeur', color:'#B07560' }
+  { id:'lise',  name:'Lise Martin',         role:'Créatrice & narratrice',        access:'admin',   color:'#C04A3F', initiales:'LM' },
+  { id:'fred',  name:'Frédérick Rouleau',   role:'Univers visuel',                access:'editeur', color:'#6E8E63', initiales:'FR' },
+  { id:'bruno', name:'Bruno Lefebvre',      role:'Réalisation sonore & musicale', access:'admin',   color:'#2F4259', initiales:'BL' },
+  { id:'anne',  name:'Anne Kishnapanaïdou', role:'Coordonnatrice',                access:'admin',   color:'#C28A2C', initiales:'AK' },
+  { id:'line',  name:'Line Charlebois',     role:'Fiche pédagogique',             access:'editeur', color:'#8C8270', initiales:'LC' },
+  { id:'ana',   name:'Ana de Rosario',      role:'Marketing & réseaux sociaux',   access:'editeur', color:'#B07560', initiales:'AR' }
 ];
 const memberById = id => TEAM.find(m=>m.id===id) || {name:'?',color:'#8C8270'};
 const initials = n => n.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
@@ -276,6 +276,25 @@ const DOCUMENTS = [
   { id:'d2', nomOriginal:'voix narration bernardo', projetId:'p2', categorie:'audio',  notes:'',                createdAt:'2026-05-08' },
   { id:'d3', nomOriginal:'montage final',           projetId:'p4', categorie:'video',  notes:'Master',          createdAt:'2026-05-04' },
   { id:'d4', nomOriginal:'planches scenes 1-3',     projetId:'p5', categorie:'images', notes:'Approuvées',      createdAt:'2026-06-08' }
+];
+
+/* ============================================================
+   NOMENCLATURE CLIENT (3e section de la vue Documents)
+   Format fourni par le client — Lili Mallette, juin 2026 :
+     AAAA-MM-JJ_Sujet_CAT_INITIALES_v_NN
+   Indépendant du module Documents historique au-dessus.
+   ============================================================ */
+const DOC_CATEGORIES_CLIENT = [
+  { key:'images', label:'Images', code:'IMG'   },
+  { key:'video',  label:'Vidéo',  code:'VIDEO' },
+  { key:'texte',  label:'Texte',  code:'TXT'   },
+  { key:'audio',  label:'Audio',  code:'AUDIO' }
+];
+const DOCUMENTS_CLIENT = [
+  { id:'cd1', date:'2026-05-14', sujet:'Filou',          projetId:'p1', categorie:'images', initiales:'FR', version:1, lienProton:'https://drive.proton.me/urls/EXEMPLE_FILOU_IMG',     resume:'Filou sur sa trottinette avec un casque rouge',  createdAt:'2026-05-14' },
+  { id:'cd2', date:'2026-05-18', sujet:'Geant_Youtube',  projetId:'p4', categorie:'video',  initiales:'BL', version:1, lienProton:'https://drive.proton.me/urls/EXEMPLE_GEANT_VIDEO',   resume:'Balado du géant pour Youtube',                   createdAt:'2026-05-18' },
+  { id:'cd3', date:'2026-05-23', sujet:'Bernardo',       projetId:'p2', categorie:'audio',  initiales:'BL', version:2, lienProton:'https://drive.proton.me/urls/EXEMPLE_BERNARDO_AUDIO',resume:'Version 2 du balado Bernardo (mastering final)', createdAt:'2026-05-23' },
+  { id:'cd4', date:'2026-06-08', sujet:'Tifi',           projetId:'p5', categorie:'texte',  initiales:'LM', version:1, lienProton:'https://drive.proton.me/urls/EXEMPLE_TIFI_TXT',    resume:'Adaptation finale du conte Tifi a Lill-la',      createdAt:'2026-06-08' }
 ];
 
 const STATUS = {
@@ -1042,6 +1061,7 @@ function renderDocs(){
   });
   dsRender();
   renderDocList();
+  renderClientDocs();
 }
 
 /* ===== DOCUMENTS — module 5 étapes ===== */
@@ -1296,6 +1316,232 @@ function exportDocsCSV(){
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),1000);
   toast('Export : '+DOCUMENTS.length+' document'+(DOCUMENTS.length>1?'s':''));
+}
+
+/* ============================================================
+   NOMENCLATURE CLIENT — module indépendant (section 3 de view-docs)
+   Format fourni par le client — Lili Mallette, juin 2026
+   ============================================================ */
+const LS_CDOCS='lili-mallette-docs-client-v1';
+function saveCDocs(){ try{ localStorage.setItem(LS_CDOCS,JSON.stringify(DOCUMENTS_CLIENT)); }catch(e){} }
+function loadCDocs(){
+  try{
+    const raw=localStorage.getItem(LS_CDOCS);
+    if(!raw) return;
+    const arr=JSON.parse(raw);
+    if(Array.isArray(arr)){ DOCUMENTS_CLIENT.length=0; arr.forEach(d=>DOCUMENTS_CLIENT.push(d)); }
+  }catch(e){}
+}
+
+/* Format fourni par le client — Lili Mallette, juin 2026 */
+function generateClientFileName({date, sujet, categorie, initiales, version}){
+  if(!date||!sujet||!categorie||!initiales) return '';
+  /* Sujet : on garde majuscules + accents, on remplace juste les espaces
+     par des underscores et on retire les caractères qui poseraient
+     problème dans un nom de fichier. */
+  const cleanSujet = String(sujet).trim().replace(/\s+/g,'_').replace(/[^A-Za-z0-9À-ÿ_\-+]/g,'').replace(/^_+|_+$/g,'');
+  if(!cleanSujet) return '';
+  const cat = DOC_CATEGORIES_CLIENT.find(c=>c.key===categorie);
+  const code = cat ? cat.code : 'XXX';
+  const init = String(initiales).trim().toUpperCase();
+  const v = String(Math.max(1,parseInt(version,10)||1)).padStart(2,'0');
+  return `${date}_${cleanSujet}_${code}_${init}_v_${v}`;
+}
+
+let cdocCat='tous';
+let cdocWho='tous';
+
+function renderClientDocs(){
+  /* Filterbar 1 — catégories */
+  const fbc=document.getElementById('cdoc-filterbar-cat');
+  if(fbc){
+    const counts={tous:DOCUMENTS_CLIENT.length};
+    DOC_CATEGORIES_CLIENT.forEach(c=>{ counts[c.key]=DOCUMENTS_CLIENT.filter(d=>d.categorie===c.key).length; });
+    fbc.innerHTML=`<button class="chip ${cdocCat==='tous'?'active':''}" data-cdcat="tous">Toutes <span class="c-count">${DOCUMENTS_CLIENT.length}</span></button>`+
+      DOC_CATEGORIES_CLIENT.map(c=>`<button class="chip ${cdocCat===c.key?'active':''}" data-cdcat="${esc(c.key)}">${esc(c.label)} <span class="c-count">${counts[c.key]||0}</span></button>`).join('');
+    fbc.querySelectorAll('.chip[data-cdcat]').forEach(ch=>ch.addEventListener('click',()=>{ cdocCat=ch.dataset.cdcat; renderClientDocs(); }));
+  }
+  /* Filterbar 2 — responsables (initiales) */
+  const fbw=document.getElementById('cdoc-filterbar-who');
+  if(fbw){
+    const whoCounts={tous:DOCUMENTS_CLIENT.length};
+    TEAM.forEach(m=>{ if(m.initiales) whoCounts[m.initiales]=DOCUMENTS_CLIENT.filter(d=>d.initiales===m.initiales).length; });
+    fbw.innerHTML=`<button class="chip ${cdocWho==='tous'?'active':''}" data-cdwho="tous">Tous <span class="c-count">${DOCUMENTS_CLIENT.length}</span></button>`+
+      TEAM.filter(m=>m.initiales).map(m=>`<button class="chip ${cdocWho===m.initiales?'active':''}" data-cdwho="${esc(m.initiales)}" title="${esc(m.name)}">${esc(m.initiales)} <span class="c-count">${whoCounts[m.initiales]||0}</span></button>`).join('');
+    fbw.querySelectorAll('.chip[data-cdwho]').forEach(ch=>ch.addEventListener('click',()=>{ cdocWho=ch.dataset.cdwho; renderClientDocs(); }));
+  }
+  /* Liste filtrée + triée par date décroissante */
+  let list=DOCUMENTS_CLIENT.slice();
+  if(cdocCat!=='tous') list=list.filter(d=>d.categorie===cdocCat);
+  if(cdocWho!=='tous') list=list.filter(d=>d.initiales===cdocWho);
+  list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const grid=document.getElementById('cdoc-grid');
+  if(!grid) return;
+  if(!list.length){
+    grid.innerHTML=`<div class="placeholder" style="grid-column:1/-1">
+      <div class="ph-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/></svg></div>
+      <h2>Aucun document</h2><p>Aucun document ne correspond à ces filtres.</p></div>`;
+    return;
+  }
+  grid.innerHTML=list.map(renderClientDocCard).join('');
+  grid.querySelectorAll('.doc-card[data-cdocid]').forEach(c=>c.addEventListener('click',ev=>{
+    if(ev.target.closest('.doc-proton-link')) return;
+    openClientDocModal(c.dataset.cdocid);
+  }));
+}
+
+function renderClientDocCard(d){
+  const cat=DOC_CATEGORIES_CLIENT.find(c=>c.key===d.categorie);
+  const author=TEAM.find(m=>m.initiales===d.initiales);
+  const name=generateClientFileName({date:d.date,sujet:d.sujet,categorie:d.categorie,initiales:d.initiales,version:d.version});
+  const ok=isHttpUrl(d.lienProton);
+  return `<article class="proj-card doc-card cdoc-card" data-cdocid="${esc(d.id)}">
+    <div class="pc-head">
+      <div class="pc-top">
+        <span class="badge doc-cat-${esc(d.categorie)}">${esc(cat?cat.label:d.categorie)}</span>
+        ${author?`<span class="ava-sm cdoc-ava" style="background:${author.color}" title="${esc(author.name)}">${esc(author.initiales)}</span>`:''}
+      </div>
+      <h3 class="cdoc-name">${esc(name||'(incomplet)')}</h3>
+      ${d.resume?`<div class="cdoc-resume">${esc(d.resume)}</div>`:''}
+    </div>
+    <div class="pc-foot">
+      <span>${esc(fmtDate(d.date))}</span>
+      ${ok?`<a href="${esc(d.lienProton)}" target="_blank" rel="noopener noreferrer" class="doc-proton-link">Ouvrir sur Proton ↗</a>`:'<span style="color:var(--ink-3)">Pas de lien</span>'}
+    </div>
+  </article>`;
+}
+
+function openClientDocModal(id){
+  const isEdit=!!id;
+  const todayIso=fmtIso(new Date());
+  const d=isEdit?DOCUMENTS_CLIENT.find(x=>x.id===id)
+                :{id:null,date:todayIso,sujet:'',projetId:'',categorie:'',initiales:'BL',version:1,lienProton:'',resume:''};
+  if(isEdit&&!d) return;
+  document.getElementById('cdoc-m-title').textContent=isEdit?'Modifier le document':'Nouveau document';
+  document.getElementById('cdoc-m-sub').textContent=isEdit?'Format client — modifier':'Format client — 5 étapes';
+  const body=document.getElementById('cdoc-m-body');
+  const projOpts='<option value="">— aucun projet lié —</option>'+
+    PROJECTS.map(p=>`<option value="${esc(p.id)}"${p.id===(d.projetId||'')?' selected':''}>${esc(p.title)}</option>`).join('');
+  const catChips=DOC_CATEGORIES_CLIENT.map(c=>`<button type="button" class="chip ${c.key===d.categorie?'active':''}" data-cdform-cat="${esc(c.key)}">${esc(c.label)}</button>`).join('');
+  const whoOpts=TEAM.filter(m=>m.initiales).map(m=>`<option value="${esc(m.initiales)}"${m.initiales===(d.initiales||'')?' selected':''}>${esc(m.name)} (${esc(m.initiales)})</option>`).join('');
+  body.innerHTML=`
+    <div class="doc-step"><span class="step-num">1</span><div class="doc-step-body">
+      <div class="field-label">Informations de base</div>
+      <div class="cdoc-grid-2">
+        <label class="cdoc-field"><span>Date</span><input id="cdf-date" type="date" value="${esc(d.date||todayIso)}"></label>
+        <label class="cdoc-field"><span>Projet lié (optionnel)</span><select id="cdf-proj">${projOpts}</select></label>
+      </div>
+      <label class="cdoc-field"><span>Sujet <em style="font-weight:400;color:var(--ink-3);font-style:normal;text-transform:none;letter-spacing:0">(majuscules + accents conservés, espaces → _)</em></span><input id="cdf-sujet" placeholder="ex. Filou · Lili Jeanne Printemps · Geant Youtube" value="${esc(d.sujet||'')}"></label>
+    </div></div>
+    <div class="doc-step"><span class="step-num">2</span><div class="doc-step-body">
+      <div class="field-label">Catégorie et responsable</div>
+      <div class="filterbar" id="cdf-cats" style="margin-top:2px">${catChips}</div>
+      <label class="cdoc-field"><span>Responsable</span><select id="cdf-author">${whoOpts}</select></label>
+    </div></div>
+    <div class="doc-step"><span class="step-num">3</span><div class="doc-step-body">
+      <div class="field-label">Version</div>
+      <label class="cdoc-field" style="max-width:160px"><span>Numéro</span><input id="cdf-version" type="number" min="1" step="1" value="${esc(String(d.version||1))}"></label>
+    </div></div>
+    <div class="doc-step"><span class="step-num">4</span><div class="doc-step-body">
+      <div class="field-label">Aperçu du nom final</div>
+      <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+        <div class="doc-name-preview empty" id="cdf-name">Le nom apparaîtra ici…</div>
+        <button type="button" class="btn sm" id="cdf-copy" disabled>📋 Copier</button>
+      </div>
+    </div></div>
+    <div class="doc-step"><span class="step-num">5</span><div class="doc-step-body">
+      <div class="field-label">Lien et résumé</div>
+      <label class="cdoc-field"><span>Lien Proton Drive</span><input id="cdf-link" type="url" placeholder="https://drive.proton.me/…" value="${esc(d.lienProton||'')}"></label>
+      <label class="cdoc-field"><span>Résumé / description</span><textarea id="cdf-resume" rows="2" placeholder="ex. Filou sur sa trottinette avec un casque rouge">${esc(d.resume||'')}</textarea></label>
+    </div></div>
+    <div class="doc-modal-foot">
+      ${isEdit?`<button type="button" class="btn sm" id="cdf-del" style="color:var(--accent)">Supprimer</button>`:'<span></span>'}
+      <div style="display:flex;gap:8px">
+        <button type="button" class="btn" id="cdf-cancel">Annuler</button>
+        <button type="button" class="btn primary" id="cdf-save" disabled>Enregistrer</button>
+      </div>
+    </div>`;
+  const st={date:d.date||todayIso,sujet:d.sujet||'',projetId:d.projetId||'',categorie:d.categorie||'',initiales:d.initiales||'BL',version:d.version||1,lienProton:d.lienProton||'',resume:d.resume||''};
+  const refresh=()=>{
+    const name=generateClientFileName(st);
+    const prev=document.getElementById('cdf-name');
+    const copy=document.getElementById('cdf-copy');
+    const save=document.getElementById('cdf-save');
+    if(name){ prev.textContent=name; prev.classList.remove('empty'); copy.disabled=false; }
+    else { prev.textContent='Le nom apparaîtra ici…'; prev.classList.add('empty'); copy.disabled=true; }
+    save.disabled=!(st.date&&st.sujet.trim()&&st.categorie&&st.initiales);
+  };
+  document.getElementById('cdf-date').addEventListener('change',e=>{ st.date=e.target.value||todayIso; refresh(); });
+  document.getElementById('cdf-proj').addEventListener('change',e=>{ st.projetId=e.target.value; });
+  document.getElementById('cdf-sujet').addEventListener('input',e=>{ st.sujet=e.target.value; refresh(); });
+  document.querySelectorAll('#cdf-cats [data-cdform-cat]').forEach(ch=>ch.addEventListener('click',()=>{
+    st.categorie=ch.dataset.cdformCat;
+    document.querySelectorAll('#cdf-cats .chip').forEach(c=>c.classList.toggle('active', c.dataset.cdformCat===st.categorie));
+    refresh();
+  }));
+  document.getElementById('cdf-author').addEventListener('change',e=>{ st.initiales=e.target.value; refresh(); });
+  document.getElementById('cdf-version').addEventListener('input',e=>{ const n=parseInt(e.target.value,10); st.version=isNaN(n)||n<1?1:n; refresh(); });
+  document.getElementById('cdf-link').addEventListener('input',e=>{ st.lienProton=e.target.value.trim(); });
+  document.getElementById('cdf-resume').addEventListener('input',e=>{ st.resume=e.target.value; });
+  document.getElementById('cdf-copy').addEventListener('click',()=>{
+    const name=generateClientFileName(st); if(!name) return;
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(name).then(()=>toast('Nom copié')); }
+    else { const ta=document.createElement('textarea'); ta.value=name; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); toast('Nom copié'); }
+  });
+  document.getElementById('cdf-cancel').addEventListener('click',closeClientDocModal);
+  document.getElementById('cdf-save').addEventListener('click',()=>saveClientDocFromForm(id,st));
+  if(isEdit){
+    document.getElementById('cdf-del').addEventListener('click',()=>{
+      if(!confirm('Supprimer ce document ?')) return;
+      const i=DOCUMENTS_CLIENT.findIndex(x=>x.id===id);
+      if(i<0) return;
+      DOCUMENTS_CLIENT.splice(i,1); saveCDocs(); closeClientDocModal(); renderClientDocs(); toast('Document supprimé');
+    });
+  }
+  refresh();
+  document.getElementById('client-doc-overlay').classList.add('open');
+  setTimeout(()=>{ const n=document.getElementById('cdf-sujet'); if(n) n.focus(); },50);
+}
+
+function closeClientDocModal(){ document.getElementById('client-doc-overlay').classList.remove('open'); }
+
+function saveClientDocFromForm(id,s){
+  if(!s.date||!s.sujet.trim()||!s.categorie||!s.initiales) return;
+  const payload={
+    date:s.date,
+    sujet:s.sujet.trim(),
+    projetId:s.projetId||'',
+    categorie:s.categorie,
+    initiales:s.initiales,
+    version:Math.max(1,parseInt(s.version,10)||1),
+    lienProton:s.lienProton||'',
+    resume:s.resume||''
+  };
+  if(id){
+    const i=DOCUMENTS_CLIENT.findIndex(x=>x.id===id);
+    if(i>=0) DOCUMENTS_CLIENT[i]={...DOCUMENTS_CLIENT[i],...payload};
+  } else {
+    DOCUMENTS_CLIENT.push({id:'cd_'+Date.now(),...payload,createdAt:fmtIso(new Date())});
+  }
+  saveCDocs(); closeClientDocModal(); renderClientDocs();
+  toast(id?'Document mis à jour':'Document ajouté');
+}
+
+function exportClientDocsCSV(){
+  /* Format client : séparateur ;, BOM UTF-8, colonnes exactes du tableur */
+  const headers=['Nom de fichier','Résumé','Lien final','Sources_Production'];
+  const csvEsc=v=>{ const s=String(v??''); return /[";\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+  const lines=[headers.join(';')];
+  DOCUMENTS_CLIENT.forEach(d=>{
+    const name=generateClientFileName({date:d.date,sujet:d.sujet,categorie:d.categorie,initiales:d.initiales,version:d.version});
+    lines.push([csvEsc(name),csvEsc(d.resume||''),csvEsc(d.lienProton||''),csvEsc('')].join(';'));
+  });
+  const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='documents_lili_'+fmtIso(new Date())+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  toast('Export : '+DOCUMENTS_CLIENT.length+' document'+(DOCUMENTS_CLIENT.length>1?'s':''));
 }
 
 /* ===== KANBAN ===== */
@@ -1553,7 +1799,8 @@ document.getElementById('menu-toggle').addEventListener('click',()=>{
 });
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape') return;
-  if(document.getElementById('doc-overlay').classList.contains('open')) closeDocModal();
+  if(document.getElementById('client-doc-overlay').classList.contains('open')) closeClientDocModal();
+  else if(document.getElementById('doc-overlay').classList.contains('open')) closeDocModal();
   else closeModal();
 });
 
@@ -1652,12 +1899,22 @@ loadState();
 loadTeam();
 loadTasks();
 loadDocs();
+loadCDocs();
 migrateLegacyDocLinks();
 (function(){
   const n=document.getElementById('doc-new-btn');
   if(n) n.addEventListener('click',()=>openDocModal(null));
   const c=document.getElementById('doc-csv-btn');
   if(c) c.addEventListener('click',exportDocsCSV);
+  /* Nomenclature client — 3e section */
+  const cn=document.getElementById('cdoc-new-btn');
+  if(cn) cn.addEventListener('click',()=>openClientDocModal(null));
+  const cc=document.getElementById('cdoc-csv-btn');
+  if(cc) cc.addEventListener('click',exportClientDocsCSV);
+  const cb=document.getElementById('cdoc-m-close');
+  if(cb) cb.addEventListener('click',closeClientDocModal);
+  const ov=document.getElementById('client-doc-overlay');
+  if(ov) ov.addEventListener('click',e=>{ if(e.target.id==='client-doc-overlay') closeClientDocModal(); });
 })();
 (function(){ const b=document.getElementById('invite-btn'); if(b) b.addEventListener('click',showInviteForm); })();
 (function(){ const b=document.getElementById('task-new-btn'); if(b) b.addEventListener('click',()=>openTaskForm(null)); })();
