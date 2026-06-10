@@ -9,7 +9,11 @@
    côté client, n'importe qui peut contourner via les outils dev du
    navigateur. Pour une vraie auth, brancher Supabase plus tard.
    Pour changer les identifiants : modifier les valeurs ci-dessous et
-   redéployer. */
+   redéployer.
+   AUTH_ENABLED = false  →  désactive complètement l'écran de login
+                            et le bouton déconnexion. Aucune saisie
+                            requise au chargement de la page. */
+const AUTH_ENABLED = false;
 const AUTH = {
   identifiant: 'liliatelier',
   motDePasse:  '123456'
@@ -51,10 +55,18 @@ function logout(){
   location.reload();
 }
 /* Branche le formulaire dès maintenant : si l'utilisateur n'est pas
-   identifié, l'écran reste visible ; sinon on le masque. */
+   identifié, l'écran reste visible ; sinon on le masque.
+   Si AUTH_ENABLED est false, on masque tout (écran + bouton déconnexion). */
 (function bootAuth(){
   if(typeof document==='undefined') return;
   const wire=()=>{
+    if(!AUTH_ENABLED){
+      /* Bypass total — masque l'écran de login et le bouton déconnexion. */
+      hideAuthScreen();
+      const lb=document.getElementById('logout-btn');
+      if(lb) lb.style.display='none';
+      return;
+    }
     const form=document.getElementById('auth-form');
     if(form) form.addEventListener('submit',e=>{ e.preventDefault(); tryLogin(); });
     const logoutBtn=document.getElementById('logout-btn');
