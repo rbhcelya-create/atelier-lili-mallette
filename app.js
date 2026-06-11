@@ -441,6 +441,8 @@ function date2frac(iso){
 }
 const LS_KEY='lili-mallette-v1';
 function saveState(){
+  /* On garde l'écriture localStorage comme cache rapide (utile pour
+     d'autres modules legacy) ET on pousse en parallèle vers Supabase. */
   try{
     const data={};
     PROJECTS.forEach(p=>{ data[p.id]={
@@ -454,6 +456,8 @@ function saveState(){
     }; });
     localStorage.setItem(LS_KEY,JSON.stringify(data));
   }catch(e){}
+  /* Fire-and-forget : sync vers Supabase en arrière-plan */
+  saveProjectsToSupabase();
 }
 function loadState(){
   try{
@@ -472,6 +476,111 @@ function loadState(){
       if(s.folderLinks&&typeof s.folderLinks==='object') p.folderLinks={...(p.folderLinks||{}),...s.folderLinks};
     });
   }catch(e){}
+}
+
+/* ============================================================
+   PROJECTS — Supabase (table public.projects, JSONB pour nested)
+   ============================================================ */
+
+/* Mapping colonne BD (snake_case) ↔ champ JS (camelCase).
+   Les champs `tasks` et `resources` du modèle JS sont legacy et ne
+   sont PAS stockés en BD — on les réinitialise à [] au chargement. */
+function projectFromRow(row){
+  return {
+    id:           row.id,
+    title:        row.title,
+    fileCode:     row.file_code,
+    style:        row.style,
+    status:       row.status,
+    gStart:       parseFloat(row.g_start) || 0,
+    gEnd:         parseFloat(row.g_end) || 1,
+    dateStart:    row.date_start || undefined,
+    dateEnd:      row.date_end || undefined,
+    deadline:     row.deadline || undefined,
+    folderLinks:  (row.folder_links && typeof row.folder_links==='object') ? row.folder_links : {},
+    stages:       (row.stages && typeof row.stages==='object') ? row.stages : {},
+    deliverables: Array.isArray(row.deliverables) ? row.deliverables : [],
+    livDates:     (row.liv_dates && typeof row.liv_dates==='object') ? row.liv_dates : {},
+    comments:     Array.isArray(row.comments) ? row.comments : [],
+    docs:         (row.docs && typeof row.docs==='object') ? row.docs : {},
+    tasks:        [],
+    resources:    []
+  };
+}
+function projectToRow(p){
+  return {
+    id:           p.id,
+    title:        p.title,
+    file_code:    p.fileCode,
+    style:        p.style,
+    status:       p.status,
+    g_start:      typeof p.gStart === 'number' ? p.gStart : 0,
+    g_end:        typeof p.gEnd === 'number' ? p.gEnd : 1,
+    date_start:   p.dateStart || null,
+    date_end:     p.dateEnd || null,
+    deadline:     p.deadline || null,
+    folder_links: p.folderLinks || {},
+    stages:       p.stages || {},
+    deliverables: p.deliverables || [],
+    liv_dates:    p.livDates || {},
+    comments:     p.comments || [],
+    docs:         p.docs || {}
+  };
+}
+
+/* Charge tous les projets depuis Supabase. Si la table est vide
+   (premier lancement après création), seede avec les 7 projets
+   hardcodés (qui peuvent déjà contenir les édits localStorage
+   appliqués par loadState juste avant). */
+async function loadProjectsFromSupabase(){
+  if(!supa){
+    console.warn('[Supabase] client absent — projets non chargés.');
+    return false;
+  }
+  const { data, error } = await supa
+    .from('projects')
+    .select('*')
+    .order('id', { ascending: true });
+  if(error){
+    console.error('[Supabase] chargement projects échec :', error.message);
+    toast('Erreur de chargement projets — voir la console');
+    return false;
+  }
+  if(data.length === 0){
+    console.log('[Supabase] table projects vide, seed depuis JS...');
+    const rows = PROJECTS.map(p => projectToRow(p));
+    /* Upsert (au lieu d'insert) pour éviter les conflits si une autre
+       initialisation (ex : saveState depuis migrateLegacyDocLinks) a
+       déjà pushé entre notre SELECT et notre INSERT. */
+    const { error: seedError } = await supa.from('projects').upsert(rows, { onConflict: 'id' });
+    if(seedError){
+      console.error('[Supabase] seed projects échec :', seedError.message);
+      toast('Erreur seed projets — voir la console');
+      return false;
+    }
+    console.log('[Supabase] seed projects OK ('+rows.length+' projets)');
+    toast('Projets synchronisés avec Supabase');
+    return true;
+  }
+  /* Remplace PROJECTS en place (PROJECTS est const, donc on mute le contenu) */
+  PROJECTS.length = 0;
+  data.forEach(row => PROJECTS.push(projectFromRow(row)));
+  return true;
+}
+
+/* Pousse les 7 projets vers Supabase via upsert (insert ou update
+   selon que la ligne existe). Appelé en fire-and-forget par saveState
+   à chaque modification d'un projet. */
+async function saveProjectsToSupabase(){
+  if(!supa) return false;
+  const rows = PROJECTS.map(p => projectToRow(p));
+  const { error } = await supa.from('projects').upsert(rows, { onConflict: 'id' });
+  if(error){
+    console.error('[Supabase] upsert projects échec :', error.message);
+    toast('Erreur de sauvegarde projets — voir la console');
+    return false;
+  }
+  return true;
 }
 function linkHay(l,fname){ return (l.name||'')+' '+(l.url||'')+' '+(l.note||'')+' '+(fname||''); }
 function allFolderNames(){
@@ -2100,6 +2209,20 @@ loadTasksFromSupabase().then(ok => {
   if(!ok) return;
   const av = document.querySelector('.nav-item.active');
   if(av && av.dataset.view === 'kanban') renderKanban();
+});
+/* Projects : charge depuis Supabase (ou seed si table vide), puis
+   reconstruit la filterbar et re-render la vue active. */
+loadProjectsFromSupabase().then(ok => {
+  if(!ok) return;
+  buildFilterbar();
+  const av = document.querySelector('.nav-item.active');
+  const view = av && av.dataset.view;
+  if(view === 'dashboard') renderDashboard();
+  else if(view === 'projets') renderProjets();
+  else if(view === 'gantt') renderGantt();
+  /* On met aussi à jour le compteur dans la sidebar */
+  const nc = document.getElementById('nav-count-proj');
+  if(nc) nc.textContent = PROJECTS.length;
 });
 (function(){
   const n=document.getElementById('doc-new-btn');
