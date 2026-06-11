@@ -119,6 +119,29 @@ const TEAM = [
 const memberById = id => TEAM.find(m=>m.id===id) || {name:'?',color:'#8C8270'};
 const initials = n => n.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
 
+/* ===== UTILISATEUR COURANT (étape vers la vraie auth Supabase)
+   Permet à chaque personne de l'équipe d'indiquer qui elle est sans
+   avoir à se créer un compte. Stockée en localStorage par navigateur.
+   Quand l'auth Supabase arrivera, on mappera l'email connecté → membre
+   d'équipe automatiquement et on supprimera le sélecteur manuel. */
+const LS_CURRENT_USER = 'lili-mallette-current-user-v1';
+let currentUserId = 'bruno';
+function loadCurrentUser(){
+  try{
+    const stored = localStorage.getItem(LS_CURRENT_USER);
+    if(stored && TEAM.find(m=>m.id===stored)) currentUserId = stored;
+  }catch(e){}
+}
+function getCurrentUser(){
+  return TEAM.find(m=>m.id===currentUserId) || TEAM[0];
+}
+function setCurrentUser(id){
+  if(!TEAM.find(m=>m.id===id)) return;
+  currentUserId = id;
+  try{ localStorage.setItem(LS_CURRENT_USER, id); }catch(e){}
+  renderSidebarFoot();
+}
+
 /* Pipeline d'après le schéma client : Texte > Mise en forme,
    Fiche pédagogique en parallèle, Images, puis les livrables
    (Balado / Vidéo / Spectacle, en parallèle), puis Site internet /
@@ -822,6 +845,58 @@ function renderGantt(){
   });
 }
 
+/* ===== SIDEBAR FOOT — affichage de l'utilisateur courant + picker ===== */
+function renderSidebarFoot(){
+  const u = getCurrentUser();
+  const ava = document.querySelector('.sb-foot .ava');
+  const name = document.querySelector('.sb-foot .who .n');
+  const role = document.querySelector('.sb-foot .who .r');
+  if(ava){
+    ava.textContent = u.initiales || initials(u.name);
+    ava.style.background = u.color;
+  }
+  if(name) name.textContent = u.name;
+  if(role) role.textContent = u.role + ' · ' + (u.access === 'admin' ? 'Admin' : 'Éditeur');
+}
+function showUserPicker(){
+  const existing = document.getElementById('user-picker');
+  if(existing){ existing.remove(); return; }
+  const picker = document.createElement('div');
+  picker.id = 'user-picker';
+  picker.className = 'user-picker';
+  picker.innerHTML = `
+    <div class="user-picker-head">Connecté en tant que</div>
+    ${TEAM.map(m => `
+      <button class="user-picker-item ${m.id === currentUserId ? 'active' : ''}" data-uid="${esc(m.id)}">
+        <span class="user-picker-ava" style="background:${m.color}">${esc(m.initiales || initials(m.name))}</span>
+        <span class="user-picker-info">
+          <span class="user-picker-name">${esc(m.name)}</span>
+          <span class="user-picker-role">${esc(m.role)}</span>
+        </span>
+        ${m.id === currentUserId ? '<span class="user-picker-check">✓</span>' : ''}
+      </button>
+    `).join('')}
+    <div class="user-picker-foot">Ton choix sera mémorisé sur ce navigateur. Tes commentaires seront attribués au membre sélectionné.</div>
+  `;
+  document.body.appendChild(picker);
+  picker.querySelectorAll('[data-uid]').forEach(btn => btn.addEventListener('click', e => {
+    e.stopPropagation();
+    setCurrentUser(btn.dataset.uid);
+    picker.remove();
+    toast('Connecté en tant que ' + getCurrentUser().name);
+  }));
+  /* Fermeture sur clic à l'extérieur */
+  setTimeout(() => {
+    const closeOnOutside = (e) => {
+      if(!picker.contains(e.target) && !e.target.closest('.sb-foot')){
+        picker.remove();
+        document.removeEventListener('click', closeOnOutside);
+      }
+    };
+    document.addEventListener('click', closeOnOutside);
+  }, 10);
+}
+
 /* ===== TEAM ===== */
 function renderTeam(){
   const q=topQ();
@@ -1121,7 +1196,7 @@ function addMessage(){
   const sel=document.getElementById('cmt-to');
   const to=(sel&&sel.value)||'';
   p.comments=p.comments||[];
-  p.comments.push({ who:'anne', to:to||undefined, date:'à l\'instant', text:txt });
+  p.comments.push({ who:currentUserId, to:to||undefined, date:'à l\'instant', text:txt });
   saveState();
   renderCommentsSection(p);
   renderDashboard(); renderProjets();
@@ -1728,21 +1803,9 @@ function openClientDocModal(id){
 function closeClientDocModal(){ document.getElementById('client-doc-overlay').classList.remove('open'); }
 
 async function saveClientDocFromForm(id,s){
-  console.log('[Save Nomenclature] clic Enregistrer reçu', { id, state: s });
-  const missing = [];
-  if(!s.date) missing.push('date');
-  if(!s.sujet || !s.sujet.trim()) missing.push('sujet');
-  if(!s.categorie) missing.push('categorie');
-  if(!s.initiales) missing.push('initiales');
-  if(missing.length){
-    console.warn('[Save Nomenclature] champs manquants — abandon :', missing);
-    toast('Champs requis manquants : '+missing.join(', '));
-    return;
-  }
+  if(!s.date||!s.sujet.trim()||!s.categorie||!s.initiales) return;
   const payload = cdocToRow(s);
-  console.log('[Save Nomenclature] payload envoyé à Supabase', payload);
   const ok = await upsertCDocInSupabase(id, payload);
-  console.log('[Save Nomenclature] résultat upsert :', ok ? 'succès' : 'échec');
   if(!ok) return;
   await loadCDocsFromSupabase();
   closeClientDocModal();
@@ -2196,7 +2259,21 @@ function migrateLegacyDocLinks(){
 loadState();
 loadTeam();
 loadDocs();
+loadCurrentUser();
 migrateLegacyDocLinks();
+
+/* Sidebar foot : affiche l'utilisateur courant + clic ouvre le picker */
+renderSidebarFoot();
+(function(){
+  const foot = document.querySelector('.sb-foot');
+  if(!foot) return;
+  foot.addEventListener('click', e => {
+    /* Ignore le clic sur le bouton de déconnexion (masqué quand
+       AUTH_ENABLED=false, mais on protège quand même). */
+    if(e.target.closest('.sb-logout')) return;
+    showUserPicker();
+  });
+})();
 
 /* Chargement Supabase en arrière-plan (non bloquant). Chaque module
    re-render la vue concernée si l'utilisateur est déjà dessus. */
