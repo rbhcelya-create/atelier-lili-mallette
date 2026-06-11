@@ -1679,20 +1679,84 @@ function loadDocs(){
   }catch(e){}
 }
 
-const LS_TASKS='lili-mallette-tasks-v1';
 let TASKS=[];
 let kProj='tous';
 let kCat='tous';
 let kWho='tous';
 let kStatus='tous';
-function saveTasks(){ try{ localStorage.setItem(LS_TASKS, JSON.stringify(TASKS)); }catch(e){} }
-function loadTasks(){
-  try{
-    const raw=localStorage.getItem(LS_TASKS);
-    if(!raw) return;
-    const arr=JSON.parse(raw);
-    if(Array.isArray(arr)) TASKS=arr;
-  }catch(e){}
+
+/* Mapping colonne BD (snake_case) ↔ champ JS (camelCase) */
+function taskFromRow(row){
+  return {
+    id:        row.id,
+    title:     row.title,
+    category:  row.category,
+    projectId: row.project_id || '',
+    assignee:  row.assignee || '',
+    deadline:  row.deadline || '',
+    jalon:     row.jalon || '',
+    link:      row.link || '',
+    status:    row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+function taskToRow(t){
+  return {
+    title:      (t.title||'').trim(),
+    category:   t.category,
+    project_id: t.projectId || null,
+    assignee:   t.assignee || null,
+    deadline:   t.deadline || null,
+    jalon:      t.jalon || '',
+    link:       t.link || '',
+    status:     t.status || 'todo'
+  };
+}
+
+/* Chargement depuis Supabase — réassigne TASKS en place. */
+async function loadTasksFromSupabase(){
+  if(!supa){
+    console.warn('[Supabase] client absent — les tâches Kanban ne se chargeront pas.');
+    return false;
+  }
+  const { data, error } = await supa
+    .from('tasks')
+    .select('*')
+    .order('deadline', { ascending: true, nullsFirst: false });
+  if(error){
+    console.error('[Supabase] chargement tasks échec :', error.message);
+    toast('Erreur de chargement des tâches — voir la console');
+    return false;
+  }
+  TASKS = data.map(taskFromRow);
+  return true;
+}
+
+/* Insert ou update partiel selon que `id` est fourni. */
+async function upsertTaskInSupabase(id, payload){
+  if(!supa){ toast('Supabase indisponible'); return false; }
+  const res = id
+    ? await supa.from('tasks').update(payload).eq('id', id).select().single()
+    : await supa.from('tasks').insert(payload).select().single();
+  if(res.error){
+    console.error('[Supabase] sauvegarde tasks échec :', res.error.message);
+    toast('Erreur de sauvegarde — voir la console');
+    return false;
+  }
+  return true;
+}
+
+/* Suppression par id. */
+async function deleteTaskInSupabase(id){
+  if(!supa){ toast('Supabase indisponible'); return false; }
+  const { error } = await supa.from('tasks').delete().eq('id', id);
+  if(error){
+    console.error('[Supabase] suppression tasks échec :', error.message);
+    toast('Erreur de suppression — voir la console');
+    return false;
+  }
+  return true;
 }
 function renderKanban(){
   const q=topQ();
@@ -1784,7 +1848,7 @@ function renderKanban(){
   document.querySelectorAll('#kanban .kanban-col[data-status]').forEach(col=>{
     col.addEventListener('dragover',e=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; col.classList.add('drag-over'); });
     col.addEventListener('dragleave',e=>{ if(!col.contains(e.relatedTarget)) col.classList.remove('drag-over'); });
-    col.addEventListener('drop',e=>{
+    col.addEventListener('drop',async e=>{
       e.preventDefault();
       col.classList.remove('drag-over');
       const id=e.dataTransfer.getData('text/plain');
@@ -1792,9 +1856,18 @@ function renderKanban(){
       if(!id||!newStatus) return;
       const t=TASKS.find(x=>x.id===id);
       if(!t||t.status===newStatus) return;
+      /* Optimistic UI : on bouge la carte immédiatement pour un retour
+         visuel instantané, puis on confirme côté Supabase. Si la
+         sauvegarde échoue, on rollback et on prévient l'utilisateur. */
+      const oldStatus=t.status;
       t.status=newStatus;
-      saveTasks();
       renderKanban();
+      const ok=await upsertTaskInSupabase(id,{status:newStatus});
+      if(!ok){
+        t.status=oldStatus;
+        renderKanban();
+        return;
+      }
       toast('Tâche déplacée vers '+(KANBAN_STATUSES.find(s=>s.key===newStatus)||{}).label);
     });
   });
@@ -1840,13 +1913,18 @@ function openTaskForm(id){
     </div>`;
   document.getElementById('tk-save').addEventListener('click',()=>saveTaskFromForm(id));
   document.getElementById('tk-cancel').addEventListener('click',()=>{ box.innerHTML=''; });
-  if(id){ document.getElementById('tk-del').addEventListener('click',()=>{
+  if(id){ document.getElementById('tk-del').addEventListener('click',async ()=>{
     if(!confirm('Supprimer cette tâche ?')) return;
-    TASKS=TASKS.filter(x=>x.id!==id); saveTasks(); box.innerHTML=''; renderKanban(); toast('Tâche supprimée');
+    const ok = await deleteTaskInSupabase(id);
+    if(!ok) return;
+    await loadTasksFromSupabase();
+    box.innerHTML='';
+    renderKanban();
+    toast('Tâche supprimée');
   }); }
   document.getElementById('tk-title').focus();
 }
-function saveTaskFromForm(id){
+async function saveTaskFromForm(id){
   const title=document.getElementById('tk-title').value.trim();
   if(!title){ toast('Donnez un titre'); return; }
   const category=document.getElementById('tk-cat').value;
@@ -1857,13 +1935,10 @@ function saveTaskFromForm(id){
   const link=document.getElementById('tk-link').value.trim();
   const status=document.getElementById('tk-status').value;
   if(link&&!isHttpUrl(link)){ toast('Lien invalide — il doit commencer par https://'); return; }
-  if(id){
-    const i=TASKS.findIndex(t=>t.id===id);
-    if(i>=0) TASKS[i]={...TASKS[i],title,category,projectId,assignee,deadline,jalon,link,status};
-  } else {
-    TASKS.push({id:'t_'+Date.now(),title,category,projectId,assignee,deadline,jalon,link,status});
-  }
-  saveTasks();
+  const payload = taskToRow({title,category,projectId,assignee,deadline,jalon,link,status});
+  const ok = await upsertTaskInSupabase(id, payload);
+  if(!ok) return;
+  await loadTasksFromSupabase();
   document.getElementById('task-form').innerHTML='';
   renderKanban();
   toast(id?'Tâche mise à jour':'Tâche créée');
@@ -2011,17 +2086,20 @@ function migrateLegacyDocLinks(){
 /* init */
 loadState();
 loadTeam();
-loadTasks();
 loadDocs();
 migrateLegacyDocLinks();
 
-/* Chargement Supabase en arrière-plan (non bloquant).
-   Si l'utilisateur est déjà sur la vue Documents au moment où la requête
-   répond, on re-rend la 3e section pour afficher les vraies données. */
+/* Chargement Supabase en arrière-plan (non bloquant). Chaque module
+   re-render la vue concernée si l'utilisateur est déjà dessus. */
 loadCDocsFromSupabase().then(ok => {
   if(!ok) return;
-  const activeView = document.querySelector('.nav-item.active');
-  if(activeView && activeView.dataset.view === 'docs') renderClientDocs();
+  const av = document.querySelector('.nav-item.active');
+  if(av && av.dataset.view === 'docs') renderClientDocs();
+});
+loadTasksFromSupabase().then(ok => {
+  if(!ok) return;
+  const av = document.querySelector('.nav-item.active');
+  if(av && av.dataset.view === 'kanban') renderKanban();
 });
 (function(){
   const n=document.getElementById('doc-new-btn');
