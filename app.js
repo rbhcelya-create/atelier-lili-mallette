@@ -1364,16 +1364,83 @@ function exportDocsCSV(){
 /* ============================================================
    NOMENCLATURE CLIENT — module indépendant (section 3 de view-docs)
    Format fourni par le client — Lili Mallette, juin 2026
+   Backend Supabase : table public.documents_client.
    ============================================================ */
-const LS_CDOCS='lili-mallette-docs-client-v1';
-function saveCDocs(){ try{ localStorage.setItem(LS_CDOCS,JSON.stringify(DOCUMENTS_CLIENT)); }catch(e){} }
-function loadCDocs(){
-  try{
-    const raw=localStorage.getItem(LS_CDOCS);
-    if(!raw) return;
-    const arr=JSON.parse(raw);
-    if(Array.isArray(arr)){ DOCUMENTS_CLIENT.length=0; arr.forEach(d=>DOCUMENTS_CLIENT.push(d)); }
-  }catch(e){}
+
+/* Mapping colonne BD (snake_case) ↔ champ JS (camelCase) */
+function cdocFromRow(row){
+  return {
+    id:         row.id,
+    date:       row.date,
+    sujet:      row.sujet,
+    projetId:   row.projet_id || '',
+    categorie:  row.categorie,
+    initiales:  row.initiales,
+    version:    row.version,
+    lienProton: row.lien_proton || '',
+    resume:     row.resume || '',
+    createdAt:  row.created_at,
+    updatedAt:  row.updated_at
+  };
+}
+function cdocToRow(d){
+  return {
+    date:        d.date,
+    sujet:       (d.sujet||'').trim(),
+    projet_id:   d.projetId || null,
+    categorie:   d.categorie,
+    initiales:   d.initiales,
+    version:     Math.max(1, parseInt(d.version,10)||1),
+    lien_proton: d.lienProton || null,
+    resume:      d.resume || ''
+  };
+}
+
+/* Chargement depuis Supabase — remplace le contenu du tableau en place
+   (pour que les références existantes restent valides). */
+async function loadCDocsFromSupabase(){
+  if(!supa){
+    console.warn('[Supabase] client absent — la section Nomenclature client ne se chargera pas.');
+    return false;
+  }
+  const { data, error } = await supa
+    .from('documents_client')
+    .select('*')
+    .order('date', { ascending: false });
+  if(error){
+    console.error('[Supabase] chargement documents_client échec :', error.message);
+    toast('Erreur de chargement des documents — voir la console');
+    return false;
+  }
+  DOCUMENTS_CLIENT.length = 0;
+  data.forEach(row => DOCUMENTS_CLIENT.push(cdocFromRow(row)));
+  return true;
+}
+
+/* Insert ou update selon que `id` est fourni. Renvoie true en cas de succès. */
+async function upsertCDocInSupabase(id, payload){
+  if(!supa){ toast('Supabase indisponible'); return false; }
+  const res = id
+    ? await supa.from('documents_client').update(payload).eq('id', id).select().single()
+    : await supa.from('documents_client').insert(payload).select().single();
+  if(res.error){
+    console.error('[Supabase] sauvegarde documents_client échec :', res.error.message);
+    toast('Erreur de sauvegarde — voir la console');
+    return false;
+  }
+  return true;
+}
+
+/* Suppression d'une ligne par id. */
+async function deleteCDocInSupabase(id){
+  if(!supa){ toast('Supabase indisponible'); return false; }
+  const { error } = await supa.from('documents_client').delete().eq('id', id);
+  if(error){
+    console.error('[Supabase] suppression documents_client échec :', error.message);
+    toast('Erreur de suppression — voir la console');
+    return false;
+  }
+  return true;
 }
 
 /* Format fourni par le client — Lili Mallette, juin 2026 */
@@ -1534,11 +1601,14 @@ function openClientDocModal(id){
   document.getElementById('cdf-cancel').addEventListener('click',closeClientDocModal);
   document.getElementById('cdf-save').addEventListener('click',()=>saveClientDocFromForm(id,st));
   if(isEdit){
-    document.getElementById('cdf-del').addEventListener('click',()=>{
+    document.getElementById('cdf-del').addEventListener('click',async ()=>{
       if(!confirm('Supprimer ce document ?')) return;
-      const i=DOCUMENTS_CLIENT.findIndex(x=>x.id===id);
-      if(i<0) return;
-      DOCUMENTS_CLIENT.splice(i,1); saveCDocs(); closeClientDocModal(); renderClientDocs(); toast('Document supprimé');
+      const ok = await deleteCDocInSupabase(id);
+      if(!ok) return;
+      await loadCDocsFromSupabase();
+      closeClientDocModal();
+      renderClientDocs();
+      toast('Document supprimé');
     });
   }
   refresh();
@@ -1548,25 +1618,14 @@ function openClientDocModal(id){
 
 function closeClientDocModal(){ document.getElementById('client-doc-overlay').classList.remove('open'); }
 
-function saveClientDocFromForm(id,s){
+async function saveClientDocFromForm(id,s){
   if(!s.date||!s.sujet.trim()||!s.categorie||!s.initiales) return;
-  const payload={
-    date:s.date,
-    sujet:s.sujet.trim(),
-    projetId:s.projetId||'',
-    categorie:s.categorie,
-    initiales:s.initiales,
-    version:Math.max(1,parseInt(s.version,10)||1),
-    lienProton:s.lienProton||'',
-    resume:s.resume||''
-  };
-  if(id){
-    const i=DOCUMENTS_CLIENT.findIndex(x=>x.id===id);
-    if(i>=0) DOCUMENTS_CLIENT[i]={...DOCUMENTS_CLIENT[i],...payload};
-  } else {
-    DOCUMENTS_CLIENT.push({id:'cd_'+Date.now(),...payload,createdAt:fmtIso(new Date())});
-  }
-  saveCDocs(); closeClientDocModal(); renderClientDocs();
+  const payload=cdocToRow(s);
+  const ok = await upsertCDocInSupabase(id, payload);
+  if(!ok) return;
+  await loadCDocsFromSupabase();
+  closeClientDocModal();
+  renderClientDocs();
   toast(id?'Document mis à jour':'Document ajouté');
 }
 
@@ -1942,8 +2001,16 @@ loadState();
 loadTeam();
 loadTasks();
 loadDocs();
-loadCDocs();
 migrateLegacyDocLinks();
+
+/* Chargement Supabase en arrière-plan (non bloquant).
+   Si l'utilisateur est déjà sur la vue Documents au moment où la requête
+   répond, on re-rend la 3e section pour afficher les vraies données. */
+loadCDocsFromSupabase().then(ok => {
+  if(!ok) return;
+  const activeView = document.querySelector('.nav-item.active');
+  if(activeView && activeView.dataset.view === 'docs') renderClientDocs();
+});
 (function(){
   const n=document.getElementById('doc-new-btn');
   if(n) n.addEventListener('click',()=>openDocModal(null));
