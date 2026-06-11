@@ -121,7 +121,7 @@
             <h1 class="title">Tableau de bord</h1>
             <div class="subtitle">Vue d'ensemble de la production — où en est chaque projet aujourd'hui.</div>
           </div>
-          <button class="btn primary" onclick="toast('Maquette — la création de projet sera active dans la V1')">
+          <button class="btn primary new-proj-btn">
             <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
             Nouveau projet
           </button>
@@ -145,7 +145,7 @@
             <h1 class="title">Projets</h1>
             <div class="subtitle">Projets de la production. Cliquez sur un projet pour voir ses documents et livrables.</div>
           </div>
-          <button class="btn primary" onclick="toast('Maquette — la création de projet sera active dans la V1')">
+          <button class="btn primary new-proj-btn">
             <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
             Nouveau projet
           </button>
@@ -237,6 +237,22 @@
 </div>
 
 <!-- ===================== PROJECT MODAL ===================== -->
+<!-- ===================== NEW PROJECT MODAL ===================== -->
+<div class="overlay" id="newproj-overlay">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-head">
+      <div>
+        <h2>Nouveau projet</h2>
+        <div class="mh-file">Crée un projet pour ton équipe</div>
+      </div>
+      <button class="x-btn" id="newproj-close" aria-label="Fermer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="newproj-body" style="max-height:72vh"></div>
+  </div>
+</div>
+
 <!-- ===================== NOMENCLATURE CLIENT MODAL ===================== -->
 <div class="overlay" id="client-doc-overlay">
   <div class="modal" style="max-width:700px">

@@ -1062,6 +1062,118 @@ let modalQuery='';
 let currentLivrable=null;
 let currentDocFolder=null;
 const mqHit = txt => !modalQuery || String(txt||'').toLowerCase().includes(modalQuery);
+
+/* ===== NEW PROJECT MODAL — création d'un nouveau projet ===== */
+function openNewProjectModal(){
+  const body=document.getElementById('newproj-body');
+  if(!body) return;
+  const today=fmtIso(new Date());
+  body.innerHTML=`
+    <label class="cdoc-field"><span>Titre du projet</span>
+      <input id="np-title" placeholder="ex. Filou et le grand voyage">
+    </label>
+    <label class="cdoc-field" style="margin-top:11px"><span>Code projet <em style="font-weight:400;color:var(--ink-3);font-style:normal;text-transform:none;letter-spacing:0">(auto-rempli, modifiable)</em></span>
+      <input id="np-filecode" placeholder="auto-rempli depuis le titre">
+    </label>
+    <div class="cdoc-grid-2" style="margin-top:11px">
+      <label class="cdoc-field"><span>Style</span>
+        <select id="np-style">
+          <option value="apaisant">Histoires apaisantes</option>
+          <option value="contes">Contes du monde</option>
+          <option value="rigolo" selected>Aventures rigolotes</option>
+        </select>
+      </label>
+      <label class="cdoc-field"><span>Statut initial</span>
+        <select id="np-status">
+          <option value="idee" selected>Idée</option>
+          <option value="prod">En production</option>
+          <option value="livr">Livrables</option>
+          <option value="publie">Publié</option>
+        </select>
+      </label>
+    </div>
+    <div class="cdoc-grid-2" style="margin-top:11px">
+      <label class="cdoc-field"><span>Date de début</span>
+        <input id="np-datestart" type="date" value="${esc(today)}">
+      </label>
+      <label class="cdoc-field"><span>Échéance</span>
+        <input id="np-deadline" type="date">
+      </label>
+    </div>
+    <div class="doc-modal-foot" style="margin-top:18px">
+      <span></span>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="btn" id="np-cancel">Annuler</button>
+        <button type="button" class="btn primary" id="np-save" disabled>Créer le projet</button>
+      </div>
+    </div>`;
+  const title=document.getElementById('np-title');
+  const filecode=document.getElementById('np-filecode');
+  const save=document.getElementById('np-save');
+  /* Auto-remplissage du code projet à partir du titre */
+  let userEditedFilecode=false;
+  const autoFilecode=()=>{
+    if(userEditedFilecode) return;
+    const t=title.value.trim();
+    if(!t){ filecode.value=''; return; }
+    const slug=t.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+    filecode.value=`${today}_${slug}`;
+  };
+  title.addEventListener('input',()=>{
+    autoFilecode();
+    save.disabled=!title.value.trim();
+  });
+  filecode.addEventListener('input',()=>{ userEditedFilecode=true; });
+  document.getElementById('np-cancel').addEventListener('click',closeNewProjectModal);
+  document.getElementById('np-save').addEventListener('click',saveNewProject);
+  document.getElementById('newproj-overlay').classList.add('open');
+  setTimeout(()=>title.focus(),50);
+}
+function closeNewProjectModal(){
+  document.getElementById('newproj-overlay').classList.remove('open');
+}
+async function saveNewProject(){
+  const title=document.getElementById('np-title').value.trim();
+  if(!title){ toast('Donne un titre au projet'); return; }
+  const fileCode=document.getElementById('np-filecode').value.trim() || `${fmtIso(new Date())}_${title.replace(/\s+/g,'_')}`;
+  const style=document.getElementById('np-style').value;
+  const status=document.getElementById('np-status').value;
+  const dateStart=document.getElementById('np-datestart').value || undefined;
+  const deadline=document.getElementById('np-deadline').value || undefined;
+  /* Génère un ID unique préfixé p_ (les hardcodés sont p1-p7) */
+  const id='p_'+Date.now();
+  const newProj={
+    id, title, fileCode, style, status,
+    gStart:0, gEnd:1,
+    dateStart, deadline,
+    folderLinks:{ images:'', video:'', texte:'', audio:'' },
+    stages:{ texte:'todo', miseforme:'todo', fiche:'todo', images:'todo', balado:'todo', video:'todo', spectacle:'todo', site:'todo', distrib:'todo' },
+    deliverables:[],
+    livDates:{},
+    comments:[],
+    docs:{},
+    tasks:[],
+    resources:[]
+  };
+  PROJECTS.push(newProj);
+  /* Push vers Supabase + retour visuel immédiat */
+  const ok = await saveProjectsToSupabase();
+  if(!ok){
+    /* Rollback si Supabase échoue */
+    const i=PROJECTS.findIndex(p=>p.id===id);
+    if(i>=0) PROJECTS.splice(i,1);
+    return;
+  }
+  closeNewProjectModal();
+  buildFilterbar();
+  renderDashboard();
+  renderProjets();
+  renderGantt();
+  const navCount=document.getElementById('nav-count-proj');
+  if(navCount) navCount.textContent=PROJECTS.length;
+  toast('Projet créé : '+title);
+}
+
 function openProject(id, source, initLiv){
   const p=PROJECTS.find(x=>x.id===id);
   if(!p) return;
@@ -2294,7 +2406,8 @@ document.getElementById('menu-toggle').addEventListener('click',()=>{
 });
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape') return;
-  if(document.getElementById('client-doc-overlay').classList.contains('open')) closeClientDocModal();
+  if(document.getElementById('newproj-overlay').classList.contains('open')) closeNewProjectModal();
+  else if(document.getElementById('client-doc-overlay').classList.contains('open')) closeClientDocModal();
   else closeModal();
 });
 
@@ -2452,6 +2565,13 @@ loadTeamFromSupabase().then(ok => {
   if(cb) cb.addEventListener('click',closeClientDocModal);
   const ov=document.getElementById('client-doc-overlay');
   if(ov) ov.addEventListener('click',e=>{ if(e.target.id==='client-doc-overlay') closeClientDocModal(); });
+  /* Création de projet — bouton(s) « + Nouveau projet » présents sur le
+     Tableau de bord ET sur la vue Projets, plus la modale */
+  document.querySelectorAll('.new-proj-btn').forEach(b=>b.addEventListener('click',openNewProjectModal));
+  const npClose=document.getElementById('newproj-close');
+  if(npClose) npClose.addEventListener('click',closeNewProjectModal);
+  const npOv=document.getElementById('newproj-overlay');
+  if(npOv) npOv.addEventListener('click',e=>{ if(e.target.id==='newproj-overlay') closeNewProjectModal(); });
 })();
 (function(){ const b=document.getElementById('invite-btn'); if(b) b.addEventListener('click',showInviteForm); })();
 (function(){ const b=document.getElementById('task-new-btn'); if(b) b.addEventListener('click',()=>openTaskForm(null)); })();
