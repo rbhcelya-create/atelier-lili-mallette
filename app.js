@@ -109,12 +109,12 @@ function logout(){
 })();
 
 const TEAM = [
-  { id:'lise',  name:'Lise Martin',         role:'Créatrice & narratrice',        access:'admin',   color:'#C04A3F', initiales:'LM' },
-  { id:'fred',  name:'Frédérick Rouleau',   role:'Univers visuel',                access:'editeur', color:'#6E8E63', initiales:'FR' },
+  { id:'lise',  name:'Lise Martin',         role:'Créatrice & narratrice',        access:'admin',   color:'#C04A3F', initiales:'LM', email:'lise.martin@lilimallette.education' },
+  { id:'fred',  name:'Frédérick Rouleau',   role:'Univers visuel',                access:'editeur', color:'#6E8E63', initiales:'FR', email:'frederouleau@proton.me' },
   { id:'bruno', name:'Bruno Lefebvre',      role:'Réalisation sonore & musicale', access:'admin',   color:'#2F4259', initiales:'BL', email:'bruno.lefebvre1962@pm.me' },
-  { id:'anne',  name:'Anne Kichenapanaïdou', role:'Coordonnatrice',                access:'admin',   color:'#C28A2C', initiales:'AK' },
+  { id:'anne',  name:'Anne Kichenapanaïdou', role:'Coordonnatrice',                access:'admin',   color:'#C28A2C', initiales:'AK', email:'anne.kichenapanaidou@lilimallette.education' },
   { id:'line',  name:'Line Durocher',        role:'Fiche pédagogique',             access:'editeur', color:'#8C8270', initiales:'LD' },
-  { id:'ana',   name:'Ana de Rosario',      role:'Marketing & réseaux sociaux',   access:'editeur', color:'#B07560', initiales:'AR' }
+  { id:'ana',   name:'Ana de Rosario',      role:'Marketing & réseaux sociaux',   access:'editeur', color:'#B07560', initiales:'AR', email:'anacarolinadorosario@proton.me' }
 ];
 const memberById = id => TEAM.find(m=>m.id===id) || {name:'?',color:'#8C8270'};
 const initials = n => n.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
