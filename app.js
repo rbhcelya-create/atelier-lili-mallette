@@ -4,6 +4,36 @@
    Pipeline d'après le schéma client.
    ================================================================= */
 
+/* ===== SUPABASE — fondation du backend
+   Migration progressive de localStorage vers Supabase, module par
+   module. Pour l'instant on initialise juste le client et on teste
+   la connexion. Aucune donnée n'est encore lue/écrite côté serveur.
+   La clé publishable est conçue pour être exposée côté navigateur ;
+   la vraie sécurité passera par les politiques RLS définies dans
+   Supabase pour chaque table. */
+const SUPABASE_URL = 'https://rbcyupofvqhuihssrxwe.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_FKIOicG3sJW81e1Peo5wIw_5_u6BBjj';
+let supa = null;
+try {
+  if (typeof window !== 'undefined' && window.supabase && typeof window.supabase.createClient === 'function') {
+    supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    console.log('[Supabase] client initialisé pour', SUPABASE_URL);
+    /* Petit ping de connexion : on ne fait rien de fonctionnel, on
+       vérifie juste qu'on arrive à parler au serveur d'auth. Si le
+       réseau est OK et la clé valide, on aura une session=null (pas
+       connecté) sans erreur. Si la clé est mauvaise, on verra une
+       erreur 401 dans la console. */
+    supa.auth.getSession().then(({data, error}) => {
+      if (error) console.error('[Supabase] erreur de connexion :', error.message);
+      else console.log('[Supabase] connexion OK — session :', data.session ? 'authentifié' : 'anonyme');
+    });
+  } else {
+    console.warn('[Supabase] SDK non chargé — window.supabase est absent. Vérifie le <script> CDN dans atelier-lili-mallette.html.');
+  }
+} catch (e) {
+  console.error('[Supabase] échec d\'initialisation :', e);
+}
+
 /* ===== AUTHENTIFICATION (cosmétique)
    ATTENTION : c'est une protection visuelle uniquement. Le code étant
    côté client, n'importe qui peut contourner via les outils dev du
