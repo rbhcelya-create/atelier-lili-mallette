@@ -1619,9 +1619,21 @@ function openClientDocModal(id){
 function closeClientDocModal(){ document.getElementById('client-doc-overlay').classList.remove('open'); }
 
 async function saveClientDocFromForm(id,s){
-  if(!s.date||!s.sujet.trim()||!s.categorie||!s.initiales) return;
-  const payload=cdocToRow(s);
+  console.log('[Save Nomenclature] clic Enregistrer reçu', { id, state: s });
+  const missing = [];
+  if(!s.date) missing.push('date');
+  if(!s.sujet || !s.sujet.trim()) missing.push('sujet');
+  if(!s.categorie) missing.push('categorie');
+  if(!s.initiales) missing.push('initiales');
+  if(missing.length){
+    console.warn('[Save Nomenclature] champs manquants — abandon :', missing);
+    toast('Champs requis manquants : '+missing.join(', '));
+    return;
+  }
+  const payload = cdocToRow(s);
+  console.log('[Save Nomenclature] payload envoyé à Supabase', payload);
   const ok = await upsertCDocInSupabase(id, payload);
+  console.log('[Save Nomenclature] résultat upsert :', ok ? 'succès' : 'échec');
   if(!ok) return;
   await loadCDocsFromSupabase();
   closeClientDocModal();
