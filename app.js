@@ -1311,12 +1311,6 @@ function addMessage(){
 function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
 document.getElementById('m-close').addEventListener('click',closeModal);
 document.getElementById('overlay').addEventListener('click',e=>{ if(e.target.id==='overlay') closeModal(); });
-(function(){
-  const ov=document.getElementById('doc-overlay');
-  const cb=document.getElementById('doc-m-close');
-  if(cb) cb.addEventListener('click',closeDocModal);
-  if(ov) ov.addEventListener('click',e=>{ if(e.target.id==='doc-overlay') closeDocModal(); });
-})();
 
 /* ===== DOCUMENTS (recherche globale) ===== */
 function dsRender(){
@@ -1378,58 +1372,17 @@ function renderDocs(){
     el.addEventListener(id==='ds-q'?'input':'change',dsRender);
   });
   dsRender();
-  renderDocList();
   renderClientDocs();
 }
 
-/* ===== DOCUMENTS — module 5 étapes ===== */
-let docCat='tous';
-function renderDocList(){
-  const grid=document.getElementById('doc-grid');
-  const fb=document.getElementById('doc-filterbar');
-  if(!grid||!fb) return;
-  const counts={tous:DOCUMENTS.length};
-  DOC_CATEGORIES.forEach(c=>{ counts[c.key]=DOCUMENTS.filter(d=>d.categorie===c.key).length; });
-  fb.innerHTML=`<button class="chip ${docCat==='tous'?'active':''}" data-dcat="tous">Toutes <span class="c-count">${DOCUMENTS.length}</span></button>`+
-    DOC_CATEGORIES.map(c=>`<button class="chip ${docCat===c.key?'active':''}" data-dcat="${esc(c.key)}">${esc(c.label)} <span class="c-count">${counts[c.key]||0}</span></button>`).join('');
-  fb.querySelectorAll('.chip[data-dcat]').forEach(ch=>ch.addEventListener('click',()=>{ docCat=ch.dataset.dcat; renderDocList(); }));
-  let list=DOCUMENTS.slice();
-  if(docCat!=='tous') list=list.filter(d=>d.categorie===docCat);
-  list.sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
-  if(!list.length){
-    grid.innerHTML=`<div class="placeholder" style="grid-column:1/-1">
-      <div class="ph-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/></svg></div>
-      <h2>Aucun document</h2><p>Ajoutez votre premier document avec le bouton « Nouveau document » ci-dessus.</p></div>`;
-    return;
-  }
-  grid.innerHTML=list.map(renderDocCard).join('');
-  grid.querySelectorAll('.doc-card[data-docid]').forEach(c=>c.addEventListener('click',ev=>{
-    if(ev.target.closest('.doc-proton-link')) return;
-    openDocModal(c.dataset.docid);
-  }));
-}
-function renderDocCard(d){
-  const proj=PROJECTS.find(p=>p.id===d.projetId);
-  const cat=DOC_CATEGORIES.find(c=>c.key===d.categorie);
-  const name=generateFileName({nomOriginal:d.nomOriginal,projetId:d.projetId,categorie:d.categorie});
-  const folderUrl=docFolderLink(d);
-  const ok=isHttpUrl(folderUrl);
-  return `<article class="proj-card doc-card" data-docid="${esc(d.id)}">
-    <div class="pc-head">
-      <div class="pc-top">
-        <span class="pc-mono">${esc((cat&&cat.code)||'')}</span>
-        <span class="badge doc-cat-${esc(d.categorie)}">${esc(cat?cat.label:d.categorie)}</span>
-      </div>
-      <h3 style="font-family:'Source Sans 3',ui-monospace,monospace;font-size:13.5px;font-weight:600;line-height:1.3;word-break:break-all">${esc(name||'(nom incomplet)')}</h3>
-      <div class="pc-file">${proj?esc(proj.title):'(projet introuvable)'}</div>
-    </div>
-    <div class="pc-foot">
-      <span>${esc(fmtDate(d.createdAt))}</span>
-      ${ok?`<a href="${esc(folderUrl)}" target="_blank" rel="noopener noreferrer" class="doc-proton-link">Ouvrir le dossier ↗</a>`:'<span style="color:var(--ink-3)">Dossier non lié</span>'}
-    </div>
-  </article>`;
-}
-function openDocModal(id){
+/* ===== ANCIEN MODULE "Mes documents" — SUPPRIMÉ (2026-06-11) =====
+   Voir « NOMENCLATURE CLIENT » plus bas pour le seul module qui reste.
+   La barre de recherche transversale (#ds-panel) reste active.
+   Cette IIFE absorbe les fonctions retirées sans casser la syntaxe ; le code
+   à l'intérieur n'est jamais exécuté (jamais appelé). À supprimer dans une
+   passe ultérieure quand on aura aussi nettoyé les helpers liés. */
+(function _DELETED_old_documents_module(){ if(false){
+function _noop_old(){
   const isEdit=!!id;
   const d=isEdit?DOCUMENTS.find(x=>x.id===id):{id:null,nomOriginal:'',projetId:'',categorie:'',notes:''};
   if(isEdit&&!d) return;
@@ -1636,9 +1589,10 @@ function exportDocsCSV(){
   setTimeout(()=>URL.revokeObjectURL(url),1000);
   toast('Export : '+DOCUMENTS.length+' document'+(DOCUMENTS.length>1?'s':''));
 }
+}})();
 
 /* ============================================================
-   NOMENCLATURE CLIENT — module indépendant (section 3 de view-docs)
+   NOMENCLATURE CLIENT — module unique de la section "Mes documents"
    Format fourni par le client — Lili Mallette, juin 2026
    Backend Supabase : table public.documents_client.
    ============================================================ */
@@ -2253,7 +2207,6 @@ document.getElementById('menu-toggle').addEventListener('click',()=>{
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape') return;
   if(document.getElementById('client-doc-overlay').classList.contains('open')) closeClientDocModal();
-  else if(document.getElementById('doc-overlay').classList.contains('open')) closeDocModal();
   else closeModal();
 });
 
@@ -2402,11 +2355,7 @@ loadTeamFromSupabase().then(ok => {
   if(av && av.dataset.view === 'equipe') renderTeam();
 });
 (function(){
-  const n=document.getElementById('doc-new-btn');
-  if(n) n.addEventListener('click',()=>openDocModal(null));
-  const c=document.getElementById('doc-csv-btn');
-  if(c) c.addEventListener('click',exportDocsCSV);
-  /* Nomenclature client — 3e section */
+  /* Module Mes documents (ex-Nomenclature client) — boutons + modale */
   const cn=document.getElementById('cdoc-new-btn');
   if(cn) cn.addEventListener('click',()=>openClientDocModal(null));
   const cc=document.getElementById('cdoc-csv-btn');
