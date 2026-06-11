@@ -1734,7 +1734,11 @@ function renderClientDocCard(d){
   const cat=DOC_CATEGORIES_CLIENT.find(c=>c.key===d.categorie);
   const author=TEAM.find(m=>m.initiales===d.initiales);
   const name=generateClientFileName({date:d.date,sujet:d.sujet,categorie:d.categorie,initiales:d.initiales,version:d.version});
-  const ok=isHttpUrl(d.lienProton);
+  /* On utilise désormais le lien Proton du DOSSIER (projet+catégorie) au
+     lieu du lien par document. Si pas de dossier configuré, on retombe
+     éventuellement sur l'ancien d.lienProton (compat). */
+  const folderUrl=docFolderLink(d);
+  const ok=isHttpUrl(folderUrl);
   return `<article class="proj-card doc-card cdoc-card" data-cdocid="${esc(d.id)}">
     <div class="pc-head">
       <div class="pc-top">
@@ -1746,7 +1750,7 @@ function renderClientDocCard(d){
     </div>
     <div class="pc-foot">
       <span>${esc(fmtDate(d.date))}</span>
-      ${ok?`<a href="${esc(d.lienProton)}" target="_blank" rel="noopener noreferrer" class="doc-proton-link">Ouvrir sur Proton ↗</a>`:'<span style="color:var(--ink-3)">Pas de lien</span>'}
+      ${ok?`<a href="${esc(folderUrl)}" target="_blank" rel="noopener noreferrer" class="doc-proton-link">Ouvrir le dossier ↗</a>`:'<span style="color:var(--ink-3)">Dossier non lié</span>'}
     </div>
   </article>`;
 }
@@ -1760,7 +1764,7 @@ function openClientDocModal(id){
   document.getElementById('cdoc-m-title').textContent=isEdit?'Modifier le document':'Nouveau document';
   document.getElementById('cdoc-m-sub').textContent=isEdit?'Format client — modifier':'Format client — 5 étapes';
   const body=document.getElementById('cdoc-m-body');
-  const projOpts='<option value="">— aucun projet lié —</option>'+
+  const projOpts='<option value="">— sélectionnez un projet —</option>'+
     PROJECTS.map(p=>`<option value="${esc(p.id)}"${p.id===(d.projetId||'')?' selected':''}>${esc(p.title)}</option>`).join('');
   const catChips=DOC_CATEGORIES_CLIENT.map(c=>`<button type="button" class="chip ${c.key===d.categorie?'active':''}" data-cdform-cat="${esc(c.key)}">${esc(c.label)}</button>`).join('');
   const whoOpts=TEAM.filter(m=>m.initiales).map(m=>`<option value="${esc(m.initiales)}"${m.initiales===(d.initiales||'')?' selected':''}>${esc(m.name)} (${esc(m.initiales)})</option>`).join('');
@@ -1769,7 +1773,7 @@ function openClientDocModal(id){
       <div class="field-label">Informations de base</div>
       <div class="cdoc-grid-2">
         <label class="cdoc-field"><span>Date</span><input id="cdf-date" type="date" value="${esc(d.date||todayIso)}"></label>
-        <label class="cdoc-field"><span>Projet lié (optionnel)</span><select id="cdf-proj">${projOpts}</select></label>
+        <label class="cdoc-field"><span>Projet</span><select id="cdf-proj">${projOpts}</select></label>
       </div>
       <label class="cdoc-field"><span>Sujet <em style="font-weight:400;color:var(--ink-3);font-style:normal;text-transform:none;letter-spacing:0">(majuscules + accents conservés, espaces → _)</em></span><input id="cdf-sujet" placeholder="ex. Filou · Lili Jeanne Printemps · Geant Youtube" value="${esc(d.sujet||'')}"></label>
     </div></div>
@@ -1790,9 +1794,11 @@ function openClientDocModal(id){
       </div>
     </div></div>
     <div class="doc-step"><span class="step-num">5</span><div class="doc-step-body">
-      <div class="field-label">Lien et résumé</div>
-      <label class="cdoc-field"><span>Lien Proton Drive</span><input id="cdf-link" type="url" placeholder="https://drive.proton.me/…" value="${esc(d.lienProton||'')}"></label>
-      <label class="cdoc-field"><span>Résumé / description</span><textarea id="cdf-resume" rows="2" placeholder="ex. Filou sur sa trottinette avec un casque rouge">${esc(d.resume||'')}</textarea></label>
+      <div class="field-label">Lien d'accès au dossier Proton + résumé</div>
+      <div id="cdf-folder-zone" class="doc-folder-zone">
+        <div class="doc-step-instruction muted">Sélectionnez un projet et une catégorie à l'étape 1/2.</div>
+      </div>
+      <label class="cdoc-field" style="margin-top:10px"><span>Résumé / description</span><textarea id="cdf-resume" rows="2" placeholder="ex. Filou sur sa trottinette avec un casque rouge">${esc(d.resume||'')}</textarea></label>
     </div></div>
     <div class="doc-modal-foot">
       ${isEdit?`<button type="button" class="btn sm" id="cdf-del" style="color:var(--accent)">Supprimer</button>`:'<span></span>'}
@@ -1802,6 +1808,72 @@ function openClientDocModal(id){
       </div>
     </div>`;
   const st={date:d.date||todayIso,sujet:d.sujet||'',projetId:d.projetId||'',categorie:d.categorie||'',initiales:d.initiales||'BL',version:d.version||1,lienProton:d.lienProton||'',resume:d.resume||''};
+
+  /* Step 5 — workflow dossier Proton (lien per projet+catégorie, partagé) */
+  const renderStep5=()=>{
+    const zone=document.getElementById('cdf-folder-zone');
+    if(!zone) return;
+    if(!st.projetId||!st.categorie){
+      zone.innerHTML='<div class="doc-step-instruction muted">Sélectionnez un projet (étape 1) et une catégorie (étape 2) pour voir le lien du dossier.</div>';
+      return;
+    }
+    const proj=PROJECTS.find(x=>x.id===st.projetId);
+    const cat=DOC_CATEGORIES_CLIENT.find(x=>x.key===st.categorie);
+    const url=docFolderLink({projetId:st.projetId,categorie:st.categorie});
+    const ctx=`${esc(proj?proj.title:'')} · ${esc(cat?cat.label:st.categorie)}`;
+    if(isHttpUrl(url)){
+      zone.innerHTML=`
+        <div class="doc-folder-context">${ctx}</div>
+        <div class="doc-folder-url"><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a></div>
+        <div class="doc-folder-actions">
+          <button type="button" class="btn primary sm" id="cdf-open">↗ Ouvrir le dossier</button>
+          <button type="button" class="btn sm" id="cdf-copy-folder">📋 Copier le lien</button>
+          <button type="button" class="btn sm" id="cdf-edit-folder">Modifier</button>
+        </div>
+        <div class="doc-step-instruction">Une fois le dossier ouvert sur Proton : <b>colle le nom final</b> (Ctrl+V) sur le fichier renommé, puis <b>glisse-le</b> dans le dossier. Quand c'est fait, clique sur <b>Enregistrer</b> pour conserver une trace ici.</div>`;
+      document.getElementById('cdf-open').addEventListener('click',()=>window.open(url,'_blank','noopener'));
+      document.getElementById('cdf-copy-folder').addEventListener('click',()=>{
+        if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(()=>toast('Lien du dossier copié')); }
+        else { const ta=document.createElement('textarea'); ta.value=url; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); toast('Lien du dossier copié'); }
+      });
+      document.getElementById('cdf-edit-folder').addEventListener('click',()=>{ renderStep5Edit(url); });
+    } else {
+      renderStep5Edit('');
+    }
+  };
+  const renderStep5Edit=(currentUrl)=>{
+    const zone=document.getElementById('cdf-folder-zone');
+    if(!zone) return;
+    const proj=PROJECTS.find(x=>x.id===st.projetId);
+    const cat=DOC_CATEGORIES_CLIENT.find(x=>x.key===st.categorie);
+    const ctx=`${esc(proj?proj.title:'')} · ${esc(cat?cat.label:st.categorie)}`;
+    zone.innerHTML=`
+      <div class="doc-folder-context">${ctx}</div>
+      <input id="cdf-folder-input" type="url" placeholder="https://drive.proton.me/…" value="${esc(currentUrl||'')}">
+      <div class="doc-folder-actions">
+        <button type="button" class="btn primary sm" id="cdf-folder-save">Enregistrer ce lien pour ${ctx}</button>
+        ${currentUrl?'<button type="button" class="btn sm" id="cdf-folder-cancel">Annuler</button>':''}
+      </div>
+      <div class="doc-step-instruction muted">Ce lien sera réutilisé pour tous les futurs documents de cette combinaison projet · catégorie.</div>`;
+    const input=document.getElementById('cdf-folder-input');
+    const saveBtn=document.getElementById('cdf-folder-save');
+    const updateBtn=()=>{ saveBtn.disabled=!isHttpUrl(input.value.trim()); };
+    input.addEventListener('input',()=>{ updateBtn(); refresh(); });
+    updateBtn();
+    saveBtn.addEventListener('click',()=>{
+      const v=input.value.trim();
+      if(!isHttpUrl(v)){ toast('Lien invalide — il doit commencer par https://'); return; }
+      if(setProjectFolderLink(st.projetId,st.categorie,v)){
+        toast('Lien du dossier enregistré');
+        renderStep5();
+        refresh();
+      }
+    });
+    const cancel=document.getElementById('cdf-folder-cancel');
+    if(cancel) cancel.addEventListener('click',()=>{ renderStep5(); refresh(); });
+    setTimeout(()=>input.focus(),20);
+  };
+
   const refresh=()=>{
     const name=generateClientFileName(st);
     const prev=document.getElementById('cdf-name');
@@ -1809,19 +1881,23 @@ function openClientDocModal(id){
     const save=document.getElementById('cdf-save');
     if(name){ prev.textContent=name; prev.classList.remove('empty'); copy.disabled=false; }
     else { prev.textContent='Le nom apparaîtra ici…'; prev.classList.add('empty'); copy.disabled=true; }
-    save.disabled=!(st.date&&st.sujet.trim()&&st.categorie&&st.initiales);
+    /* Validation : nom + projet + cat + responsable + un lien dossier valide
+       (soit déjà connu via docFolderLink, soit en train d'être saisi inline). */
+    const folderUrl = (st.projetId && st.categorie) ? docFolderLink({projetId:st.projetId,categorie:st.categorie}) : '';
+    const inlineInput = document.getElementById('cdf-folder-input');
+    const effectiveFolder = isHttpUrl(folderUrl) ? folderUrl : (inlineInput ? inlineInput.value.trim() : '');
+    save.disabled=!(st.date&&st.sujet.trim()&&st.projetId&&st.categorie&&st.initiales&&isHttpUrl(effectiveFolder));
   };
   document.getElementById('cdf-date').addEventListener('change',e=>{ st.date=e.target.value||todayIso; refresh(); });
-  document.getElementById('cdf-proj').addEventListener('change',e=>{ st.projetId=e.target.value; });
+  document.getElementById('cdf-proj').addEventListener('change',e=>{ st.projetId=e.target.value; renderStep5(); refresh(); });
   document.getElementById('cdf-sujet').addEventListener('input',e=>{ st.sujet=e.target.value; refresh(); });
   document.querySelectorAll('#cdf-cats [data-cdform-cat]').forEach(ch=>ch.addEventListener('click',()=>{
     st.categorie=ch.dataset.cdformCat;
     document.querySelectorAll('#cdf-cats .chip').forEach(c=>c.classList.toggle('active', c.dataset.cdformCat===st.categorie));
-    refresh();
+    renderStep5(); refresh();
   }));
   document.getElementById('cdf-author').addEventListener('change',e=>{ st.initiales=e.target.value; refresh(); });
   document.getElementById('cdf-version').addEventListener('input',e=>{ const n=parseInt(e.target.value,10); st.version=isNaN(n)||n<1?1:n; refresh(); });
-  document.getElementById('cdf-link').addEventListener('input',e=>{ st.lienProton=e.target.value.trim(); });
   document.getElementById('cdf-resume').addEventListener('input',e=>{ st.resume=e.target.value; });
   document.getElementById('cdf-copy').addEventListener('click',()=>{
     const name=generateClientFileName(st); if(!name) return;
@@ -1829,7 +1905,17 @@ function openClientDocModal(id){
     else { const ta=document.createElement('textarea'); ta.value=name; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); toast('Nom copié'); }
   });
   document.getElementById('cdf-cancel').addEventListener('click',closeClientDocModal);
-  document.getElementById('cdf-save').addEventListener('click',()=>saveClientDocFromForm(id,st));
+  document.getElementById('cdf-save').addEventListener('click',()=>{
+    /* Si l'utilisateur a saisi un lien dossier inline mais n'a pas cliqué
+       « Enregistrer ce lien », on le persiste automatiquement avant de
+       sauvegarder le document — comme l'ancienne section 2. */
+    const inlineInput=document.getElementById('cdf-folder-input');
+    if(inlineInput){
+      const v=inlineInput.value.trim();
+      if(isHttpUrl(v)) setProjectFolderLink(st.projetId,st.categorie,v);
+    }
+    saveClientDocFromForm(id,st);
+  });
   if(isEdit){
     document.getElementById('cdf-del').addEventListener('click',async ()=>{
       if(!confirm('Supprimer ce document ?')) return;
@@ -1841,6 +1927,7 @@ function openClientDocModal(id){
       toast('Document supprimé');
     });
   }
+  renderStep5();
   refresh();
   document.getElementById('client-doc-overlay').classList.add('open');
   setTimeout(()=>{ const n=document.getElementById('cdf-sujet'); if(n) n.focus(); },50);
@@ -1866,7 +1953,8 @@ function exportClientDocsCSV(){
   const lines=[headers.join(';')];
   DOCUMENTS_CLIENT.forEach(d=>{
     const name=generateClientFileName({date:d.date,sujet:d.sujet,categorie:d.categorie,initiales:d.initiales,version:d.version});
-    lines.push([csvEsc(name),csvEsc(d.resume||''),csvEsc(d.lienProton||''),csvEsc('')].join(';'));
+    const folderUrl=docFolderLink(d);
+    lines.push([csvEsc(name),csvEsc(d.resume||''),csvEsc(folderUrl),csvEsc('')].join(';'));
   });
   const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
   const url=URL.createObjectURL(blob);
