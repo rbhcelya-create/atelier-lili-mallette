@@ -912,24 +912,106 @@ function renderTeam(){
         ${m.pending?'<span class="m-tag pending">Invitation en attente</span>':''}
       </div>
     </div>`).join('');
-  document.querySelectorAll('#team-grid [data-del-member]').forEach(b=>b.addEventListener('click',()=>{
-    const i=TEAM.findIndex(m=>m.id===b.dataset.delMember);
-    if(i>=0){ TEAM.splice(i,1); saveTeam(); renderTeam(); toast('Invitation retirée'); }
+  document.querySelectorAll('#team-grid [data-del-member]').forEach(b=>b.addEventListener('click',async ()=>{
+    const id = b.dataset.delMember;
+    const ok = await deleteTeamMemberFromSupabase(id);
+    if(!ok) return;
+    await loadTeamFromSupabase();
+    renderTeam();
+    toast('Invitation retirée');
   }));
 }
 
-/* ===== ÉQUIPE — invitation (simulation, aucun email réel) ===== */
-const LS_TEAM='lili-mallette-team-v1';
-function saveTeam(){
-  try{ localStorage.setItem(LS_TEAM, JSON.stringify(TEAM.filter(m=>m.pending))); }catch(e){}
+/* ===== ÉQUIPE — Supabase (table public.team_members) =====
+   Stocke les 6 membres permanents + les invitations en attente (pending).
+   L'authentification réelle viendra plus tard ; pour l'instant tout est
+   ouvert (RLS anon_all) et les invitations restent une simulation
+   (aucun email réel n'est envoyé). */
+
+/* Mapping colonne BD ↔ champ JS (presque tout pareil sauf created_at/updated_at) */
+function teamMemberFromRow(row){
+  return {
+    id:        row.id,
+    name:      row.name,
+    role:      row.role,
+    access:    row.access,
+    color:     row.color,
+    initiales: row.initiales || '',
+    email:     row.email || '',
+    pending:   !!row.pending,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
 }
-function loadTeam(){
-  try{
-    const raw=localStorage.getItem(LS_TEAM);
-    if(!raw) return;
-    const arr=JSON.parse(raw);
-    if(Array.isArray(arr)) arr.forEach(m=>{ if(m&&m.id&&!TEAM.some(x=>x.id===m.id)) TEAM.push(m); });
-  }catch(e){}
+function teamMemberToRow(m){
+  return {
+    id:        m.id,
+    name:      m.name,
+    role:      m.role || '',
+    access:    m.access || 'editeur',
+    color:     m.color || '#8C8270',
+    initiales: m.initiales || null,
+    email:     m.email || null,
+    pending:   !!m.pending
+  };
+}
+
+/* Charge tous les membres depuis Supabase. Si la table est vide
+   (premier lancement), seede les 6 hardcodés. */
+async function loadTeamFromSupabase(){
+  if(!supa){
+    console.warn('[Supabase] client absent — équipe non chargée.');
+    return false;
+  }
+  const { data, error } = await supa
+    .from('team_members')
+    .select('*')
+    .order('created_at', { ascending: true });
+  if(error){
+    console.error('[Supabase] chargement team_members échec :', error.message);
+    toast('Erreur de chargement équipe — voir la console');
+    return false;
+  }
+  if(data.length === 0){
+    console.log('[Supabase] table team_members vide, seed depuis JS...');
+    const rows = TEAM.map(m => teamMemberToRow(m));
+    const { error: seedError } = await supa.from('team_members').upsert(rows, { onConflict: 'id' });
+    if(seedError){
+      console.error('[Supabase] seed team_members échec :', seedError.message);
+      toast('Erreur seed équipe — voir la console');
+      return false;
+    }
+    console.log('[Supabase] seed team_members OK ('+rows.length+' membres)');
+    toast('Équipe synchronisée avec Supabase');
+    return true;
+  }
+  /* Remplace TEAM en place (TEAM est const) */
+  TEAM.length = 0;
+  data.forEach(row => TEAM.push(teamMemberFromRow(row)));
+  return true;
+}
+
+async function upsertTeamMemberInSupabase(member){
+  if(!supa){ toast('Supabase indisponible'); return false; }
+  const row = teamMemberToRow(member);
+  const { error } = await supa.from('team_members').upsert(row, { onConflict: 'id' });
+  if(error){
+    console.error('[Supabase] upsert team_member échec :', error.message);
+    toast('Erreur de sauvegarde équipe — voir la console');
+    return false;
+  }
+  return true;
+}
+
+async function deleteTeamMemberFromSupabase(id){
+  if(!supa){ toast('Supabase indisponible'); return false; }
+  const { error } = await supa.from('team_members').delete().eq('id', id);
+  if(error){
+    console.error('[Supabase] delete team_member échec :', error.message);
+    toast('Erreur de suppression équipe — voir la console');
+    return false;
+  }
+  return true;
 }
 function showInviteForm(){
   const box=document.getElementById('invite-form');
@@ -950,15 +1032,25 @@ function showInviteForm(){
   document.getElementById('inv-cancel').addEventListener('click',()=>{ box.innerHTML=''; });
   document.getElementById('inv-name').focus();
 }
-function sendInvite(){
+async function sendInvite(){
   const name=(document.getElementById('inv-name').value||'').trim();
   const email=(document.getElementById('inv-email').value||'').trim();
   const access=document.getElementById('inv-access').value;
   if(!name){ toast('Indiquez un nom'); return; }
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ toast('Adresse email invalide'); return; }
   const colors=['#C04A3F','#6E8E63','#2F4259','#C28A2C','#8C8270','#B07560'];
-  TEAM.push({ id:'inv_'+Date.now(), name, role:email, access, color:colors[TEAM.length%colors.length], email, pending:true });
-  saveTeam();
+  const newMember = {
+    id:    'inv_'+Date.now(),
+    name,
+    role:  email,
+    access,
+    color: colors[TEAM.length%colors.length],
+    email,
+    pending: true
+  };
+  const ok = await upsertTeamMemberInSupabase(newMember);
+  if(!ok) return;
+  await loadTeamFromSupabase();
   document.getElementById('invite-form').innerHTML='';
   renderTeam();
   toast('Invitation envoyée à '+email+' (simulation)');
@@ -2257,7 +2349,6 @@ function migrateLegacyDocLinks(){
 
 /* init */
 loadState();
-loadTeam();
 loadDocs();
 loadCurrentUser();
 migrateLegacyDocLinks();
@@ -2300,6 +2391,15 @@ loadProjectsFromSupabase().then(ok => {
   /* On met aussi à jour le compteur dans la sidebar */
   const nc = document.getElementById('nav-count-proj');
   if(nc) nc.textContent = PROJECTS.length;
+});
+/* Équipe : charge depuis Supabase (ou seed si table vide). Si l'user
+   est sur la vue Équipe, on re-rend. On rafraîchit aussi la sidebar foot
+   (avatar + nom) au cas où le user courant aurait changé d'avatar/role. */
+loadTeamFromSupabase().then(ok => {
+  if(!ok) return;
+  renderSidebarFoot();
+  const av = document.querySelector('.nav-item.active');
+  if(av && av.dataset.view === 'equipe') renderTeam();
 });
 (function(){
   const n=document.getElementById('doc-new-btn');
