@@ -1465,29 +1465,11 @@ function dsRender(){
   box.querySelectorAll('[data-dsproj]').forEach(b=>b.addEventListener('click',()=>openProject(b.dataset.dsproj)));
 }
 function renderDocs(){
-  const panel=document.getElementById('ds-panel');
-  if(!panel) return;
-  const optList=(arr,all)=>`<option value="">${all}</option>`+arr.map(o=>`<option value="${esc(o.v)}">${esc(o.t)}</option>`).join('');
-  const projOpts=optList(PROJECTS.map(p=>({v:p.id,t:p.title})),'Tous');
-  const foldOpts=optList(allFolderNames().map(n=>({v:n,t:n})),'Tous');
-  const catOpts=optList(DOC_CATS.map(c=>({v:c,t:c})),'Toutes');
-  const statOpts=optList(DOC_STATS.map(s=>({v:s,t:s})),'Tous');
-  const permOpts='<option value="">Toutes</option><option value="lecture">Lecture</option><option value="edition">Édition</option><option value="admin">Admin</option>';
-  panel.innerHTML=`
-    <input id="ds-q" class="ds-input" placeholder="Titre ou version (ex : « v2 dépôt SODEC »)">
-    <div class="ds-filters">
-      <label>Projet<select id="ds-proj">${projOpts}</select></label>
-      <label>Sous-dossier<select id="ds-fold">${foldOpts}</select></label>
-      <label>Catégorie<select id="ds-cat">${catOpts}</select></label>
-      <label>Statut<select id="ds-stat">${statOpts}</select></label>
-      <label>Permission<select id="ds-perm">${permOpts}</select></label>
-    </div>
-    <div id="ds-results" style="margin-top:18px"></div>`;
-  ['ds-q','ds-proj','ds-fold','ds-cat','ds-stat','ds-perm'].forEach(id=>{
-    const el=document.getElementById(id); if(!el) return;
-    el.addEventListener(id==='ds-q'?'input':'change',dsRender);
-  });
-  dsRender();
+  /* L'ancienne recherche transversale (#ds-panel) a été retirée de la vue
+     en 2026-06-11 — elle cherchait dans un format de données qui n'est
+     plus rempli (l'ancien module Mes documents a été supprimé). La
+     recherche utilise désormais la barre du topbar qui filtre directement
+     la section Mes documents via renderClientDocs(). */
   renderClientDocs();
 }
 
@@ -1826,10 +1808,21 @@ function renderClientDocs(){
       TEAM.filter(m=>m.initiales).map(m=>`<button class="chip ${cdocWho===m.initiales?'active':''}" data-cdwho="${esc(m.initiales)}" title="${esc(m.name)}">${esc(m.initiales)} <span class="c-count">${whoCounts[m.initiales]||0}</span></button>`).join('');
     fbw.querySelectorAll('.chip[data-cdwho]').forEach(ch=>ch.addEventListener('click',()=>{ cdocWho=ch.dataset.cdwho; renderClientDocs(); }));
   }
-  /* Liste filtrée + triée par date décroissante */
+  /* Liste filtrée (catégorie + responsable + texte du topbar) + triée par date desc */
+  const q = topQ();
   let list=DOCUMENTS_CLIENT.slice();
   if(cdocCat!=='tous') list=list.filter(d=>d.categorie===cdocCat);
   if(cdocWho!=='tous') list=list.filter(d=>d.initiales===cdocWho);
+  if(q){
+    list=list.filter(d=>{
+      const proj=PROJECTS.find(p=>p.id===d.projetId);
+      const author=TEAM.find(m=>m.initiales===d.initiales);
+      const cat=DOC_CATEGORIES_CLIENT.find(c=>c.key===d.categorie);
+      const name=generateClientFileName({date:d.date,sujet:d.sujet,categorie:d.categorie,initiales:d.initiales,version:d.version});
+      const hay=(d.sujet||'')+' '+(d.resume||'')+' '+(name||'')+' '+(proj?proj.title:'')+' '+(author?author.name:'')+' '+(cat?cat.label:'')+' '+(d.date||'');
+      return hay.toLowerCase().includes(q);
+    });
+  }
   list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const grid=document.getElementById('cdoc-grid');
   if(!grid) return;
@@ -2484,7 +2477,7 @@ document.getElementById('search').addEventListener('input',()=>{
   else if(v==='gantt') renderGantt();
   else if(v==='equipe') renderTeam();
   else if(v==='kanban') renderKanban();
-  else if(v==='docs'){ const dq=document.getElementById('ds-q'); if(dq){ dq.value=document.getElementById('search').value; dsRender(); } }
+  else if(v==='docs') renderClientDocs();
 });
 
 /* mobile menu */
