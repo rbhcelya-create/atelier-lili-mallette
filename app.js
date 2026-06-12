@@ -1465,11 +1465,25 @@ function dsRender(){
   box.querySelectorAll('[data-dsproj]').forEach(b=>b.addEventListener('click',()=>openProject(b.dataset.dsproj)));
 }
 function renderDocs(){
-  /* L'ancienne recherche transversale (#ds-panel) a été retirée de la vue
-     en 2026-06-11 — elle cherchait dans un format de données qui n'est
-     plus rempli (l'ancien module Mes documents a été supprimé). La
-     recherche utilise désormais la barre du topbar qui filtre directement
-     la section Mes documents via renderClientDocs(). */
+  /* Panneau de recherche en haut : un seul input qui filtre la grille
+     « Mes documents » plus bas. Synchronisé avec la barre du topbar
+     pour qu'elles montrent toujours la même valeur. */
+  const panel=document.getElementById('ds-panel');
+  if(panel){
+    const topVal = (document.getElementById('search')||{}).value || '';
+    panel.innerHTML = `
+      <input id="ds-q" class="ds-input" placeholder="Cherche : sujet, projet, responsable, date, catégorie, résumé… (ex : « Filou », « Bruno », « 2026-05 », « audio »)" value="${esc(topVal)}">
+    `;
+    const dsq=document.getElementById('ds-q');
+    if(dsq){
+      dsq.addEventListener('input',()=>{
+        /* Synchronise la barre du topbar avec ce qu'on tape ici */
+        const topInput=document.getElementById('search');
+        if(topInput) topInput.value=dsq.value;
+        renderClientDocs();
+      });
+    }
+  }
   renderClientDocs();
 }
 
@@ -2477,7 +2491,12 @@ document.getElementById('search').addEventListener('input',()=>{
   else if(v==='gantt') renderGantt();
   else if(v==='equipe') renderTeam();
   else if(v==='kanban') renderKanban();
-  else if(v==='docs') renderClientDocs();
+  else if(v==='docs'){
+    /* Synchronise l'input du panneau « Rechercher un document » */
+    const dsq=document.getElementById('ds-q');
+    if(dsq) dsq.value=document.getElementById('search').value;
+    renderClientDocs();
+  }
 });
 
 /* mobile menu */
