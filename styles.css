@@ -887,6 +887,38 @@ h1.title{
 .k-card-date.warn{color:var(--accent)}
 .k-card-jalon{font-size:11.5px;color:var(--ink-3);display:flex;align-items:center;gap:5px}
 .k-card-link{align-self:flex-start;padding:4px 9px;font-size:11.5px;text-decoration:none}
+
+/* Validation des tâches — badge + boutons + bordure */
+.k-card.k-validated{
+  border-left:3px solid var(--sage);
+}
+.k-card-validated-row{
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  margin-top:4px;
+}
+.k-card-validated-row .vbadge{
+  background:var(--sage-soft);color:var(--sage);
+  padding:3px 9px;border-radius:9px;
+  font-size:11px;font-weight:700;
+  display:inline-flex;align-items:center;
+  line-height:1.2;
+}
+.k-validate-btn{
+  align-self:flex-start;margin-top:4px;
+  background:var(--sage);color:#fff;border:1px solid var(--sage);
+  padding:5px 11px;border-radius:6px;
+  font-size:11.5px;font-weight:600;cursor:pointer;
+  transition:background .12s;
+}
+.k-validate-btn:hover{background:#5C7A53;border-color:#5C7A53}
+.k-devalidate-btn{
+  background:none;color:var(--ink-3);border:1px solid var(--line);
+  padding:2px 8px;border-radius:5px;
+  font-size:10.5px;font-weight:500;cursor:pointer;
+  margin-left:auto;
+  transition:background .12s,color .12s;
+}
+.k-devalidate-btn:hover{background:var(--accent-soft);color:var(--accent-dark);border-color:var(--accent-soft)}
 /* 5 colonnes maintenues le plus longtemps possible — on tolère que
    chaque colonne devienne plus étroite plutôt que de wrap sur 2 lignes. */
 @media (max-width:980px){

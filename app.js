@@ -140,6 +140,10 @@ function setCurrentUser(id){
   currentUserId = id;
   try{ localStorage.setItem(LS_CURRENT_USER, id); }catch(e){}
   renderSidebarFoot();
+  /* Re-render la vue active si elle dépend du rôle de l'utilisateur courant
+     (Kanban affiche les boutons Valider/Dévalider uniquement aux admins). */
+  const av = document.querySelector('.nav-item.active');
+  if(av && av.dataset.view === 'kanban') renderKanban();
 }
 
 /* Pipeline d'après le schéma client : Texte > Mise en forme,
@@ -2106,29 +2110,33 @@ let kStatus='tous';
 /* Mapping colonne BD (snake_case) ↔ champ JS (camelCase) */
 function taskFromRow(row){
   return {
-    id:        row.id,
-    title:     row.title,
-    category:  row.category,
-    projectId: row.project_id || '',
-    assignee:  row.assignee || '',
-    deadline:  row.deadline || '',
-    jalon:     row.jalon || '',
-    link:      row.link || '',
-    status:    row.status,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
+    id:          row.id,
+    title:       row.title,
+    category:    row.category,
+    projectId:   row.project_id || '',
+    assignee:    row.assignee || '',
+    deadline:    row.deadline || '',
+    jalon:       row.jalon || '',
+    link:        row.link || '',
+    status:      row.status,
+    validatedBy: row.validated_by || '',
+    validatedAt: row.validated_at || '',
+    createdAt:   row.created_at,
+    updatedAt:   row.updated_at
   };
 }
 function taskToRow(t){
   return {
-    title:      (t.title||'').trim(),
-    category:   t.category,
-    project_id: t.projectId || null,
-    assignee:   t.assignee || null,
-    deadline:   t.deadline || null,
-    jalon:      t.jalon || '',
-    link:       t.link || '',
-    status:     t.status || 'todo'
+    title:        (t.title||'').trim(),
+    category:     t.category,
+    project_id:   t.projectId || null,
+    assignee:     t.assignee || null,
+    deadline:     t.deadline || null,
+    jalon:        t.jalon || '',
+    link:         t.link || '',
+    status:       t.status || 'todo',
+    validated_by: t.validatedBy || null,
+    validated_at: t.validatedAt || null
   };
 }
 
@@ -2176,6 +2184,57 @@ async function deleteTaskInSupabase(id){
   }
   return true;
 }
+
+/* Validation par un admin — applique validated_by + validated_at en BD,
+   met à jour la tâche en mémoire, re-rend le Kanban. */
+async function validateTask(id){
+  const t = TASKS.find(x=>x.id===id);
+  if(!t) return false;
+  const u = getCurrentUser();
+  if(u.access !== 'admin'){
+    toast('Seul un administrateur peut valider une tâche');
+    return false;
+  }
+  const nowIso = new Date().toISOString();
+  /* Optimistic UI : on met à jour en mémoire et on rend immédiatement */
+  const prev = { validatedBy: t.validatedBy, validatedAt: t.validatedAt };
+  t.validatedBy = u.id;
+  t.validatedAt = nowIso;
+  renderKanban();
+  const ok = await upsertTaskInSupabase(id, { validated_by: u.id, validated_at: nowIso });
+  if(!ok){
+    /* Rollback */
+    t.validatedBy = prev.validatedBy;
+    t.validatedAt = prev.validatedAt;
+    renderKanban();
+    return false;
+  }
+  toast('Tâche validée par '+u.name);
+  return true;
+}
+async function devalidateTask(id){
+  const t = TASKS.find(x=>x.id===id);
+  if(!t) return false;
+  const u = getCurrentUser();
+  if(u.access !== 'admin'){
+    toast('Seul un administrateur peut dévalider une tâche');
+    return false;
+  }
+  const prev = { validatedBy: t.validatedBy, validatedAt: t.validatedAt };
+  t.validatedBy = '';
+  t.validatedAt = '';
+  renderKanban();
+  const ok = await upsertTaskInSupabase(id, { validated_by: null, validated_at: null });
+  if(!ok){
+    t.validatedBy = prev.validatedBy;
+    t.validatedAt = prev.validatedAt;
+    renderKanban();
+    return false;
+  }
+  toast('Validation annulée');
+  return true;
+}
+
 function renderKanban(){
   const q=topQ();
   /* Panneau de filtres — 3 dropdowns : Projet, Responsable, Catégorie */
@@ -2252,7 +2311,9 @@ function renderKanban(){
   }).join('');
   document.querySelectorAll('#kanban .k-card[data-id]').forEach(c=>{
     c.addEventListener('click',ev=>{
-      if(ev.target.closest('.k-card-link')) return;
+      /* Les clics sur les boutons internes (link, valider, dévalider) ne doivent
+         pas ouvrir le formulaire d'édition de la tâche. */
+      if(ev.target.closest('.k-card-link, .k-validate-btn, .k-devalidate-btn')) return;
       openTaskForm(c.dataset.id);
     });
     c.setAttribute('draggable','true');
@@ -2263,6 +2324,19 @@ function renderKanban(){
     });
     c.addEventListener('dragend',()=>c.classList.remove('dragging'));
   });
+  /* Boutons Valider / Dévalider — uniquement visibles si l'utilisateur
+     courant est admin (cf. canValidate/canDevalidate dans renderTaskCard). */
+  document.querySelectorAll('#kanban [data-tk-validate]').forEach(b=>b.addEventListener('click',async ev=>{
+    ev.stopPropagation();
+    const id = b.dataset.tkValidate;
+    await validateTask(id);
+  }));
+  document.querySelectorAll('#kanban [data-tk-devalidate]').forEach(b=>b.addEventListener('click',async ev=>{
+    ev.stopPropagation();
+    const id = b.dataset.tkDevalidate;
+    if(!confirm('Annuler la validation de cette tâche ?')) return;
+    await devalidateTask(id);
+  }));
   document.querySelectorAll('#kanban .kanban-col[data-status]').forEach(col=>{
     col.addEventListener('dragover',e=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; col.classList.add('drag-over'); });
     col.addEventListener('dragleave',e=>{ if(!col.contains(e.relatedTarget)) col.classList.remove('drag-over'); });
@@ -2295,7 +2369,15 @@ function renderTaskCard(t,today){
   const m=t.assignee?memberById(t.assignee):null;
   const dl=t.deadline?new Date(t.deadline+'T00:00:00'):null;
   const overdue = dl && dl<today && t.status!=='done' && t.status!=='deposited';
-  return `<div class="k-card" data-id="${esc(t.id)}">
+  /* Validation : seul un admin peut valider/dévalider. Le badge est visible
+     pour tous les utilisateurs si la tâche a été validée. */
+  const isValidated = !!t.validatedBy;
+  const validator = isValidated ? memberById(t.validatedBy) : null;
+  const validDate = isValidated && t.validatedAt ? fmtDate(t.validatedAt.split('T')[0]) : '';
+  const currentUserIsAdmin = getCurrentUser().access === 'admin';
+  const canValidate = currentUserIsAdmin && t.status === 'done' && !isValidated;
+  const canDevalidate = currentUserIsAdmin && isValidated;
+  return `<div class="k-card${isValidated?' k-validated':''}" data-id="${esc(t.id)}">
     <div class="k-card-title">${esc(t.title)}</div>
     <div class="k-card-meta">
       ${L?`<span class="tk-stage">${esc(L.label)}</span>`:''}
@@ -2304,6 +2386,11 @@ function renderTaskCard(t,today){
     </div>
     ${t.jalon?`<div class="k-card-jalon">📌 ${esc(t.jalon)}</div>`:''}
     ${t.link&&isHttpUrl(t.link)?`<a class="btn sm k-card-link" href="${esc(t.link)}" target="_blank" rel="noopener noreferrer">Ouvrir Proton</a>`:''}
+    ${isValidated?`<div class="k-card-validated-row">
+      <span class="vbadge">✓ Validée par ${esc(validator?validator.name:t.validatedBy)}${validDate?` · ${esc(validDate)}`:''}</span>
+      ${canDevalidate?`<button type="button" class="k-devalidate-btn" data-tk-devalidate="${esc(t.id)}" title="Annuler la validation">Dévalider</button>`:''}
+    </div>`:''}
+    ${canValidate?`<button type="button" class="k-validate-btn" data-tk-validate="${esc(t.id)}">✓ Valider la tâche</button>`:''}
   </div>`;
 }
 function openTaskForm(id){
