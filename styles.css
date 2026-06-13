@@ -617,6 +617,9 @@ h1.title{
   padding:9px 11px;font-family:inherit;font-size:13.5px;color:var(--ink);
 }
 .ds-filters select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.cdoc-count{
+  font-size:13.5px;color:var(--ink-3);margin:0 0 14px;font-weight:500;
+}
 
 .field-label{
   font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;

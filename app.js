@@ -1465,24 +1465,45 @@ function dsRender(){
   box.querySelectorAll('[data-dsproj]').forEach(b=>b.addEventListener('click',()=>openProject(b.dataset.dsproj)));
 }
 function renderDocs(){
-  /* Panneau de recherche en haut : un seul input qui filtre la grille
-     « Mes documents » plus bas. Synchronisé avec la barre du topbar
-     pour qu'elles montrent toujours la même valeur. */
+  /* Panneau de recherche en haut : input + 4 dropdowns (Projet, Catégorie,
+     Responsable, Année) qui filtrent la grille « Mes documents » plus bas.
+     Synchronisé avec la barre du topbar. */
   const panel=document.getElementById('ds-panel');
   if(panel){
     const topVal = (document.getElementById('search')||{}).value || '';
+    /* Options des dropdowns */
+    const projOpts = `<option value="tous">Tous les projets</option>`+
+      PROJECTS.map(p=>`<option value="${esc(p.id)}"${p.id===cdocProj?' selected':''}>${esc(p.title)}</option>`).join('');
+    const catOpts = `<option value="tous">Toutes les catégories</option>`+
+      DOC_CATEGORIES_CLIENT.map(c=>`<option value="${esc(c.key)}"${c.key===cdocCat?' selected':''}>${esc(c.label)}</option>`).join('');
+    const whoOpts = `<option value="tous">Tous les responsables</option>`+
+      TEAM.filter(m=>m.initiales).map(m=>`<option value="${esc(m.initiales)}"${m.initiales===cdocWho?' selected':''}>${esc(m.name)} (${esc(m.initiales)})</option>`).join('');
+    /* Années extraites des documents existants, tri descendant */
+    const years = [...new Set(DOCUMENTS_CLIENT.map(d=>(d.date||'').slice(0,4)).filter(Boolean))].sort().reverse();
+    const yearOpts = `<option value="tous">Toutes les années</option>`+
+      years.map(y=>`<option value="${esc(y)}"${y===cdocYear?' selected':''}>${esc(y)}</option>`).join('');
     panel.innerHTML = `
-      <input id="ds-q" class="ds-input" placeholder="Cherche : sujet, projet, responsable, date, catégorie, résumé… (ex : « Filou », « Bruno », « 2026-05 », « audio »)" value="${esc(topVal)}">
+      <input id="ds-q" class="ds-input" placeholder="Sujet, projet, responsable, date… (ex : « Filou », « Bruno », « 2026-05 »)" value="${esc(topVal)}">
+      <div class="ds-filters">
+        <label>Projet<select id="ds-proj">${projOpts}</select></label>
+        <label>Catégorie<select id="ds-cat">${catOpts}</select></label>
+        <label>Responsable<select id="ds-who">${whoOpts}</select></label>
+        <label>Année<select id="ds-year">${yearOpts}</select></label>
+      </div>
     `;
+    /* Wiring */
     const dsq=document.getElementById('ds-q');
     if(dsq){
       dsq.addEventListener('input',()=>{
-        /* Synchronise la barre du topbar avec ce qu'on tape ici */
         const topInput=document.getElementById('search');
         if(topInput) topInput.value=dsq.value;
         renderClientDocs();
       });
     }
+    document.getElementById('ds-proj').addEventListener('change',e=>{ cdocProj=e.target.value; renderClientDocs(); });
+    document.getElementById('ds-cat').addEventListener('change',e=>{ cdocCat=e.target.value; renderClientDocs(); });
+    document.getElementById('ds-who').addEventListener('change',e=>{ cdocWho=e.target.value; renderClientDocs(); });
+    document.getElementById('ds-year').addEventListener('change',e=>{ cdocYear=e.target.value; renderClientDocs(); });
   }
   renderClientDocs();
 }
@@ -1802,31 +1823,19 @@ function generateClientFileName({date, sujet, categorie, initiales, version}){
 
 let cdocCat='tous';
 let cdocWho='tous';
+let cdocProj='tous';
+let cdocYear='tous';
 
 function renderClientDocs(){
-  /* Filterbar 1 — catégories */
-  const fbc=document.getElementById('cdoc-filterbar-cat');
-  if(fbc){
-    const counts={tous:DOCUMENTS_CLIENT.length};
-    DOC_CATEGORIES_CLIENT.forEach(c=>{ counts[c.key]=DOCUMENTS_CLIENT.filter(d=>d.categorie===c.key).length; });
-    fbc.innerHTML=`<button class="chip ${cdocCat==='tous'?'active':''}" data-cdcat="tous">Toutes <span class="c-count">${DOCUMENTS_CLIENT.length}</span></button>`+
-      DOC_CATEGORIES_CLIENT.map(c=>`<button class="chip ${cdocCat===c.key?'active':''}" data-cdcat="${esc(c.key)}">${esc(c.label)} <span class="c-count">${counts[c.key]||0}</span></button>`).join('');
-    fbc.querySelectorAll('.chip[data-cdcat]').forEach(ch=>ch.addEventListener('click',()=>{ cdocCat=ch.dataset.cdcat; renderClientDocs(); }));
-  }
-  /* Filterbar 2 — responsables (initiales) */
-  const fbw=document.getElementById('cdoc-filterbar-who');
-  if(fbw){
-    const whoCounts={tous:DOCUMENTS_CLIENT.length};
-    TEAM.forEach(m=>{ if(m.initiales) whoCounts[m.initiales]=DOCUMENTS_CLIENT.filter(d=>d.initiales===m.initiales).length; });
-    fbw.innerHTML=`<button class="chip ${cdocWho==='tous'?'active':''}" data-cdwho="tous">Tous <span class="c-count">${DOCUMENTS_CLIENT.length}</span></button>`+
-      TEAM.filter(m=>m.initiales).map(m=>`<button class="chip ${cdocWho===m.initiales?'active':''}" data-cdwho="${esc(m.initiales)}" title="${esc(m.name)}">${esc(m.initiales)} <span class="c-count">${whoCounts[m.initiales]||0}</span></button>`).join('');
-    fbw.querySelectorAll('.chip[data-cdwho]').forEach(ch=>ch.addEventListener('click',()=>{ cdocWho=ch.dataset.cdwho; renderClientDocs(); }));
-  }
-  /* Liste filtrée (catégorie + responsable + texte du topbar) + triée par date desc */
+  /* Les filtres sont désormais dans le panneau du haut (ds-panel) :
+     Projet, Catégorie, Responsable, Année + recherche texte. La grille
+     « Mes documents » plus bas affiche le résultat filtré. */
   const q = topQ();
   let list=DOCUMENTS_CLIENT.slice();
+  if(cdocProj!=='tous') list=list.filter(d=>d.projetId===cdocProj);
   if(cdocCat!=='tous') list=list.filter(d=>d.categorie===cdocCat);
   if(cdocWho!=='tous') list=list.filter(d=>d.initiales===cdocWho);
+  if(cdocYear!=='tous') list=list.filter(d=>(d.date||'').slice(0,4)===cdocYear);
   if(q){
     list=list.filter(d=>{
       const proj=PROJECTS.find(p=>p.id===d.projetId);
@@ -1838,12 +1847,21 @@ function renderClientDocs(){
     });
   }
   list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  /* Compteur de résultats au-dessus de la grille */
+  const cntEl=document.getElementById('cdoc-count');
+  if(cntEl){
+    const total=DOCUMENTS_CLIENT.length;
+    const hasFilter = q || cdocProj!=='tous' || cdocCat!=='tous' || cdocWho!=='tous' || cdocYear!=='tous';
+    cntEl.textContent = hasFilter
+      ? `${list.length} document${list.length>1?'s':''} sur ${total}`
+      : `${list.length} document${list.length>1?'s':''}`;
+  }
   const grid=document.getElementById('cdoc-grid');
   if(!grid) return;
   if(!list.length){
     grid.innerHTML=`<div class="placeholder" style="grid-column:1/-1">
       <div class="ph-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/></svg></div>
-      <h2>Aucun document</h2><p>Aucun document ne correspond à ces filtres.</p></div>`;
+      <h2>Aucun document</h2><p>Aucun document ne correspond à ces filtres. Modifie tes critères dans le panneau de recherche en haut.</p></div>`;
     return;
   }
   grid.innerHTML=list.map(renderClientDocCard).join('');
