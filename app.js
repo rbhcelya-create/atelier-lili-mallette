@@ -1071,6 +1071,9 @@ const mqHit = txt => !modalQuery || String(txt||'').toLowerCase().includes(modal
 function openNewProjectModal(){
   const body=document.getElementById('newproj-body');
   if(!body) return;
+  /* Réinitialise le titre du modal (réutilisé par le mode édition) */
+  const tEl=document.getElementById('newproj-title'); if(tEl) tEl.textContent='Nouveau projet';
+  const sEl=document.getElementById('newproj-sub'); if(sEl) sEl.textContent='Crée un projet pour ton équipe';
   const today=fmtIso(new Date());
   body.innerHTML=`
     <label class="cdoc-field"><span>Titre du projet</span>
@@ -1178,6 +1181,102 @@ async function saveNewProject(){
   toast('Projet créé : '+title);
 }
 
+/* ===== MODIFIER / SUPPRIMER UN PROJET — réservé aux admins =====
+   Réutilise le modal "newproj-overlay" en mode édition. Le sélecteur
+   "qui suis-je" (getCurrentUser) détermine le rôle ; les boutons ne
+   s'affichent qu'aux admins ET les fonctions revérifient le rôle
+   (défense en profondeur, même si tout est côté client). */
+function openEditProjectModal(id){
+  if(getCurrentUser().access!=='admin'){ toast('Seul un administrateur peut modifier un projet'); return; }
+  const p=PROJECTS.find(x=>x.id===id);
+  if(!p){ return; }
+  const body=document.getElementById('newproj-body');
+  if(!body) return;
+  const tEl=document.getElementById('newproj-title'); if(tEl) tEl.textContent='Modifier le projet';
+  const sEl=document.getElementById('newproj-sub'); if(sEl) sEl.textContent='Mets à jour les informations du projet';
+  const styleOpts=STYLES.map(s=>`<option value="${esc(s.id)}"${s.id===p.style?' selected':''}>${esc(s.name)}</option>`).join('');
+  const statusOpts=Object.keys(STATUS).map(k=>`<option value="${esc(k)}"${k===p.status?' selected':''}>${esc(STATUS[k].label)}</option>`).join('');
+  body.innerHTML=`
+    <label class="cdoc-field"><span>Titre du projet</span>
+      <input id="np-title" value="${esc(p.title)}">
+    </label>
+    <label class="cdoc-field" style="margin-top:11px"><span>Code projet</span>
+      <input id="np-filecode" value="${esc(p.fileCode||'')}">
+    </label>
+    <div class="cdoc-grid-2" style="margin-top:11px">
+      <label class="cdoc-field"><span>Style</span>
+        <select id="np-style">${styleOpts}</select>
+      </label>
+      <label class="cdoc-field"><span>Statut</span>
+        <select id="np-status">${statusOpts}</select>
+      </label>
+    </div>
+    <div class="cdoc-grid-2" style="margin-top:11px">
+      <label class="cdoc-field"><span>Date de début</span>
+        <input id="np-datestart" type="date" value="${esc(p.dateStart||'')}">
+      </label>
+      <label class="cdoc-field"><span>Échéance</span>
+        <input id="np-deadline" type="date" value="${esc(p.deadline||'')}">
+      </label>
+    </div>
+    <div class="doc-modal-foot" style="margin-top:18px">
+      <button type="button" class="btn sm" id="np-delete" style="color:var(--accent)">Supprimer le projet</button>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="btn" id="np-cancel">Annuler</button>
+        <button type="button" class="btn primary" id="np-save">Enregistrer</button>
+      </div>
+    </div>`;
+  const title=document.getElementById('np-title');
+  const save=document.getElementById('np-save');
+  title.addEventListener('input',()=>{ save.disabled=!title.value.trim(); });
+  document.getElementById('np-cancel').addEventListener('click',closeNewProjectModal);
+  document.getElementById('np-save').addEventListener('click',()=>saveEditedProject(id));
+  document.getElementById('np-delete').addEventListener('click',()=>deleteProject(id));
+  document.getElementById('newproj-overlay').classList.add('open');
+  setTimeout(()=>title.focus(),50);
+}
+async function saveEditedProject(id){
+  if(getCurrentUser().access!=='admin'){ toast('Seul un administrateur peut modifier un projet'); return; }
+  const p=PROJECTS.find(x=>x.id===id);
+  if(!p) return;
+  const title=document.getElementById('np-title').value.trim();
+  if(!title){ toast('Donne un titre au projet'); return; }
+  /* Snapshot pour rollback si Supabase échoue */
+  const prev={ title:p.title, fileCode:p.fileCode, style:p.style, status:p.status, dateStart:p.dateStart, deadline:p.deadline };
+  p.title    = title;
+  p.fileCode = document.getElementById('np-filecode').value.trim() || p.fileCode;
+  p.style    = document.getElementById('np-style').value;
+  p.status   = document.getElementById('np-status').value;
+  p.dateStart= document.getElementById('np-datestart').value || undefined;
+  p.deadline = document.getElementById('np-deadline').value || undefined;
+  const ok=await saveProjectsToSupabase();
+  if(!ok){ Object.assign(p,prev); return; }
+  closeNewProjectModal();
+  buildFilterbar(); renderDashboard(); renderProjets(); renderGantt();
+  toast('Projet mis à jour');
+}
+async function deleteProject(id){
+  if(getCurrentUser().access!=='admin'){ toast('Seul un administrateur peut supprimer un projet'); return; }
+  const p=PROJECTS.find(x=>x.id===id);
+  if(!p) return;
+  if(!confirm('Supprimer définitivement le projet « '+p.title+' » ? Cette action est irréversible.')) return;
+  if(!supa){ toast('Connexion à la base requise pour supprimer'); return; }
+  const { error } = await supa.from('projects').delete().eq('id', id);
+  if(error){
+    console.error('[Supabase] suppression projet échec :', error.message);
+    toast('Erreur de suppression — voir la console');
+    return;
+  }
+  const i=PROJECTS.findIndex(x=>x.id===id);
+  if(i>=0) PROJECTS.splice(i,1);
+  closeNewProjectModal();
+  closeModal();
+  buildFilterbar(); renderDashboard(); renderProjets(); renderGantt();
+  const navCount=document.getElementById('nav-count-proj');
+  if(navCount) navCount.textContent=PROJECTS.length;
+  toast('Projet supprimé');
+}
+
 function openProject(id, source, initLiv){
   const p=PROJECTS.find(x=>x.id===id);
   if(!p) return;
@@ -1187,27 +1286,43 @@ function openProject(id, source, initLiv){
   document.getElementById('m-title').textContent=p.title;
   document.getElementById('m-file').textContent=`${p.fileCode} · ${STATUS[p.status].label}`;
 
-  /* période (dates éditables) */
+  /* bouton Modifier (admins seulement) */
+  const isAdmin=getCurrentUser().access==='admin';
+  const editBtn=document.getElementById('m-edit');
+  if(editBtn){
+    if(isAdmin){
+      editBtn.style.display='';
+      editBtn.onclick=()=>{ closeModal(); openEditProjectModal(id); };
+    } else {
+      editBtn.style.display='none';
+      editBtn.onclick=null;
+    }
+  }
+
+  /* période (dates éditables — admins seulement) */
   const md=document.getElementById('m-dates');
   if(md){
     const ds=p.dateStart||fmtIso(frac2date(p.gStart));
     const de=p.dateEnd||fmtIso(frac2date(p.gEnd));
     const dl=p.deadline||'';
+    const dis=isAdmin?'':' disabled';
     md.innerHTML=`
-      <label class="md-field">Début <input type="date" id="md-start" value="${esc(ds)}"></label>
-      <label class="md-field">Fin <input type="date" id="md-end" value="${esc(de)}"></label>
-      <label class="md-field">Échéance <input type="date" id="md-deadline" value="${esc(dl)}"></label>`;
-    const wireDate=(id,k)=>{
-      const el=document.getElementById(id); if(!el) return;
-      el.addEventListener('change',()=>{
-        p[k]=el.value||undefined;
-        saveState();
-        renderGantt(); renderDashboard(); renderProjets();
-      });
-    };
-    wireDate('md-start','dateStart');
-    wireDate('md-end','dateEnd');
-    wireDate('md-deadline','deadline');
+      <label class="md-field">Début <input type="date" id="md-start" value="${esc(ds)}"${dis}></label>
+      <label class="md-field">Fin <input type="date" id="md-end" value="${esc(de)}"${dis}></label>
+      <label class="md-field">Échéance <input type="date" id="md-deadline" value="${esc(dl)}"${dis}></label>`;
+    if(isAdmin){
+      const wireDate=(id,k)=>{
+        const el=document.getElementById(id); if(!el) return;
+        el.addEventListener('change',()=>{
+          p[k]=el.value||undefined;
+          saveState();
+          renderGantt(); renderDashboard(); renderProjets();
+        });
+      };
+      wireDate('md-start','dateStart');
+      wireDate('md-end','dateEnd');
+      wireDate('md-deadline','deadline');
+    }
   }
 
   /* recherche locale + panneaux */

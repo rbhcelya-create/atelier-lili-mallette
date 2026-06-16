@@ -241,8 +241,8 @@
   <div class="modal" style="max-width:560px">
     <div class="modal-head">
       <div>
-        <h2>Nouveau projet</h2>
-        <div class="mh-file">Crée un projet pour ton équipe</div>
+        <h2 id="newproj-title">Nouveau projet</h2>
+        <div class="mh-file" id="newproj-sub">Crée un projet pour ton équipe</div>
       </div>
       <button class="x-btn" id="newproj-close" aria-label="Fermer">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -276,9 +276,12 @@
         <h2 id="m-title">Projet</h2>
         <div class="mh-file" id="m-file"></div>
       </div>
-      <button class="x-btn" id="m-close" aria-label="Fermer">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 6l12 12M18 6L6 18"/></svg>
-      </button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="btn sm" id="m-edit" style="display:none">Modifier</button>
+        <button class="x-btn" id="m-close" aria-label="Fermer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
     </div>
     <div class="modal-dates" id="m-dates"></div>
     <div class="modal-search">
