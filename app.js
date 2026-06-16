@@ -804,7 +804,11 @@ function renderGantt(){
     let cells='';
     for(let d=1;d<=m.days;d++){
       const tod = todIn && mi===tMi && d===today.getDate();
-      cells+=`<div class="gd${tod?' tod':''}">${d}</div>`;
+      /* Sur 12 mois, afficher chaque jour rend les numéros illisibles.
+         On n'étiquette qu'un repère tous les 5 jours (1, 5, 10, …), en plus
+         gros, tout en gardant une cellule (ligne de grille) pour chaque jour. */
+      const show = d===1 || d%5===0;
+      cells+=`<div class="gd${tod?' tod':''}${show?' gd-lbl':''}">${show?d:''}</div>`;
     }
     return `<div class="gmo">${cells}</div>`;
   }).join('');
