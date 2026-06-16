@@ -445,12 +445,24 @@ function fmtIso(d){
   return d.getFullYear()+'-'+m+'-'+day;
 }
 function frac2date(frac){
-  const NM=GMONTHS.length, Y=2026, M0=4;
+  const NM=GMONTHS.length, Y=GWIN_Y, M0=GWIN_M0;
   if(frac==null||isNaN(frac)) return new Date(Y,M0,1);
   const f=Math.max(0,Math.min(NM,frac));
   const mi=Math.min(NM-1,Math.floor(f));
   const dim=GMONTHS[mi].days;
   const day=Math.max(1,Math.min(dim,Math.round((f-Math.floor(f))*dim)+1));
+  return new Date(Y,M0+mi,day);
+}
+/* Les fractions historiques gStart/gEnd ont été saisies dans l'ancien
+   repère fixe (mai 2026 = 0). On les interprète toujours dans ce repère,
+   indépendamment de la fenêtre d'affichage glissante. */
+function legacyFracToDate(frac){
+  const Y=2026, M0=4; /* mai 2026 */
+  if(frac==null||isNaN(frac)) return new Date(Y,M0,1);
+  const f=Math.max(0,frac);
+  const mi=Math.floor(f);
+  const dim=new Date(Y,M0+mi+1,0).getDate();
+  const day=Math.max(1,Math.min(dim,Math.round((f-mi)*dim)+1));
   return new Date(Y,M0+mi,day);
 }
 function _addDay(iso){
@@ -462,7 +474,7 @@ function date2frac(iso){
   if(!iso) return null;
   const d=new Date(iso+'T00:00:00');
   if(isNaN(d)) return null;
-  const NM=GMONTHS.length, Y=2026, M0=4;
+  const NM=GMONTHS.length, Y=GWIN_Y, M0=GWIN_M0;
   const mi=(d.getFullYear()-Y)*12+(d.getMonth()-M0);
   if(mi<0) return 0;
   if(mi>=NM) return NM;
@@ -763,22 +775,24 @@ function renderProjets(){
 }
 
 /* ===== GANTT ===== */
-const GMONTHS=[
-  {label:'Mai 2026',days:31},
-  {label:'Juin 2026',days:30},
-  {label:'Juil. 2026',days:31},
-  {label:'Août 2026',days:31},
-  {label:'Sept. 2026',days:30},
-  {label:'Oct. 2026',days:31},
-  {label:'Nov. 2026',days:30},
-  {label:'Déc. 2026',days:31},
-  {label:'Janv. 2027',days:31},
-  {label:'Févr. 2027',days:28},
-  {label:'Mars 2027',days:31},
-  {label:'Avril 2027',days:30}
-];
+/* Fenêtre glissante : 12 mois à partir du mois courant (recalculée à
+   chaque chargement de page). */
+const _gnow=new Date();
+const GWIN_Y=_gnow.getFullYear();
+const GWIN_M0=_gnow.getMonth();
+const GMONTHS=(function(){
+  const ML=['Janv.','Févr.','Mars','Avril','Mai','Juin','Juil.','Août','Sept.','Oct.','Nov.','Déc.'];
+  const arr=[];
+  for(let i=0;i<12;i++){
+    const d=new Date(GWIN_Y,GWIN_M0+i,1);
+    const y=d.getFullYear(), m=d.getMonth();
+    const days=new Date(y,m+1,0).getDate(); /* nb de jours du mois (gère les années bissextiles) */
+    arr.push({label:ML[m]+' '+y, days});
+  }
+  return arr;
+})();
 function renderGantt(){
-  const NM=GMONTHS.length, Y=2026, M0=4; /* M0 = mai (index 4) */
+  const NM=GMONTHS.length, Y=GWIN_Y, M0=GWIN_M0; /* fenêtre glissante : mois courant */
   const today=new Date(); today.setHours(0,0,0,0);
   const tMi=(today.getFullYear()-Y)*12+(today.getMonth()-M0);
   const todIn = tMi>=0 && tMi<NM;
@@ -822,8 +836,8 @@ function renderGantt(){
     /* 4 sous-rangées : une barre par livrable (Balado, Vidéo, Spectacle, Fiche) */
     LIVRABLES.forEach(L=>{
       const ld=p.livDates[L.key]||{};
-      const startIso=ld.start||p.dateStart||fmtIso(frac2date(p.gStart));
-      const endIso=ld.end||p.dateEnd||fmtIso(frac2date(p.gEnd));
+      const startIso=ld.start||p.dateStart||fmtIso(legacyFracToDate(p.gStart));
+      const endIso=ld.end||p.dateEnd||fmtIso(legacyFracToDate(p.gEnd));
       const fs=date2frac(startIso);
       const fe=date2frac(_addDay(endIso));
       const left=(fs/NM)*100;
@@ -1310,8 +1324,8 @@ function openProject(id, source, initLiv){
   /* période (dates éditables — admins seulement) */
   const md=document.getElementById('m-dates');
   if(md){
-    const ds=p.dateStart||fmtIso(frac2date(p.gStart));
-    const de=p.dateEnd||fmtIso(frac2date(p.gEnd));
+    const ds=p.dateStart||fmtIso(legacyFracToDate(p.gStart));
+    const de=p.dateEnd||fmtIso(legacyFracToDate(p.gEnd));
     const dl=p.deadline||'';
     const dis=isAdmin?'':' disabled';
     md.innerHTML=`
@@ -2668,8 +2682,8 @@ document.addEventListener('mousedown',e=>{
             :e.target.classList.contains('gb-resize-r')?'end':'move';
   const NM=GMONTHS.length;
   const ld=p.livDates[lk]||{};
-  const startIso=ld.start||p.dateStart||fmtIso(frac2date(p.gStart));
-  const endIso=ld.end||p.dateEnd||fmtIso(frac2date(p.gEnd));
+  const startIso=ld.start||p.dateStart||fmtIso(legacyFracToDate(p.gStart));
+  const endIso=ld.end||p.dateEnd||fmtIso(legacyFracToDate(p.gEnd));
   const fs0=date2frac(startIso);
   const fe0=date2frac(_addDay(endIso));
   _ganttDrag={ p, lk, bar, mode, trackRect, x0:e.clientX, fs0, fe0, NM };
