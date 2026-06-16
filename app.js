@@ -380,13 +380,15 @@ const LIVRABLES=[
   { key:'balado',    label:'Balados',             folders:['Texte','Audio'] },
   { key:'video',     label:'Vidéos',              folders:['Texte','Image'] },
   { key:'spectacle', label:'Spectacles',          folders:['Audio','Texte','Image'] },
-  { key:'fiche',     label:'Fiches pédagogiques', folders:['Texte','Image'] }
+  { key:'fiche',     label:'Fiches pédagogiques', folders:['Texte','Image'] },
+  { key:'comm',      label:'Communication',       folders:['Texte','Image','Vidéo','Audio','Fiche pédago'] }
 ];
 const LIV_SVG={
   balado: DELIV_TYPES.balado.svg,
   video: DELIV_TYPES.video.svg,
   spectacle: DELIV_TYPES.spectacle.svg,
-  fiche: '<path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/>'
+  fiche: '<path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/>',
+  comm: '<path d="M4 9v6h3l6 4V5L7 9H4z"/><path d="M17 9a4 4 0 0 1 0 6"/><path d="M20 7a8 8 0 0 1 0 10"/>'
 };
 
 /* ===== helpers ===== */
