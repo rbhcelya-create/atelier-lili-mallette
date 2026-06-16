@@ -769,7 +769,13 @@ const GMONTHS=[
   {label:'Juil. 2026',days:31},
   {label:'Août 2026',days:31},
   {label:'Sept. 2026',days:30},
-  {label:'Oct. 2026',days:31}
+  {label:'Oct. 2026',days:31},
+  {label:'Nov. 2026',days:30},
+  {label:'Déc. 2026',days:31},
+  {label:'Janv. 2027',days:31},
+  {label:'Févr. 2027',days:28},
+  {label:'Mars 2027',days:31},
+  {label:'Avril 2027',days:30}
 ];
 function renderGantt(){
   const NM=GMONTHS.length, Y=2026, M0=4; /* M0 = mai (index 4) */
