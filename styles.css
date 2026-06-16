@@ -398,6 +398,8 @@ h1.title{
   cursor:grab;user-select:none;
 }
 .g-bar.dragging{cursor:grabbing;opacity:.92;box-shadow:var(--shadow)}
+/* Barre verrouillée (non-admin) : pas de déplacement, curseur normal. */
+.g-bar.g-bar-locked{cursor:pointer}
 .g-bar .gb-fill{position:absolute;left:0;top:0;bottom:0;background:rgba(255,255,255,.16);z-index:0}
 .g-bar .gb-lbl{position:relative;z-index:1;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
 .gb-resize{

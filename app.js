@@ -793,6 +793,7 @@ const GMONTHS=(function(){
 })();
 function renderGantt(){
   const NM=GMONTHS.length, Y=GWIN_Y, M0=GWIN_M0; /* fenêtre glissante : mois courant */
+  const ganttAdmin=getCurrentUser().access==='admin'; /* seul l'admin déplace les barres */
   const today=new Date(); today.setHours(0,0,0,0);
   const tMi=(today.getFullYear()-Y)*12+(today.getMonth()-M0);
   const todIn = tMi>=0 && tMi<NM;
@@ -847,10 +848,10 @@ function renderGantt(){
         <div class="g-track">
           ${GMONTHS.map(()=>`<div class="gcell"></div>`).join('')}
           ${todIn?`<div class="g-today" style="left:${todPct}%"></div>`:''}
-          <div class="g-bar" data-pid="${esc(p.id)}" data-lk="${esc(L.key)}" style="left:${left}%;width:${width}%">
-            <span class="gb-resize gb-resize-l"></span>
+          <div class="g-bar${ganttAdmin?'':' g-bar-locked'}" data-pid="${esc(p.id)}" data-lk="${esc(L.key)}" style="left:${left}%;width:${width}%">
+            ${ganttAdmin?'<span class="gb-resize gb-resize-l"></span>':''}
             <span class="gb-lbl">${esc(L.label)}</span>
-            <span class="gb-resize gb-resize-r"></span>
+            ${ganttAdmin?'<span class="gb-resize gb-resize-r"></span>':''}
           </div>
         </div>
       </div>`;
@@ -2349,6 +2350,13 @@ async function deleteTaskInSupabase(id){
 
 /* Validation par un admin — applique validated_by + validated_at en BD,
    met à jour la tâche en mémoire, re-rend le Kanban. */
+/* Droit de modifier une tâche : un admin OU la personne assignée à la tâche.
+   Sert à verrouiller édition / suppression / déplacement (drag&drop). */
+function canTouchTask(t){
+  const u = getCurrentUser();
+  if(u.access==='admin') return true;
+  return !!t && !!t.assignee && t.assignee===u.id;
+}
 async function validateTask(id){
   const t = TASKS.find(x=>x.id===id);
   if(!t) return false;
@@ -2478,13 +2486,17 @@ function renderKanban(){
       if(ev.target.closest('.k-card-link, .k-validate-btn, .k-devalidate-btn')) return;
       openTaskForm(c.dataset.id);
     });
-    c.setAttribute('draggable','true');
-    c.addEventListener('dragstart',e=>{
-      e.dataTransfer.setData('text/plain',c.dataset.id);
-      e.dataTransfer.effectAllowed='move';
-      c.classList.add('dragging');
-    });
-    c.addEventListener('dragend',()=>c.classList.remove('dragging'));
+    /* Drag&drop réservé à la personne assignée ou à un admin. */
+    const _ct=TASKS.find(x=>x.id===c.dataset.id);
+    if(canTouchTask(_ct)){
+      c.setAttribute('draggable','true');
+      c.addEventListener('dragstart',e=>{
+        e.dataTransfer.setData('text/plain',c.dataset.id);
+        e.dataTransfer.effectAllowed='move';
+        c.classList.add('dragging');
+      });
+      c.addEventListener('dragend',()=>c.classList.remove('dragging'));
+    }
   });
   /* Boutons Valider / Dévalider — uniquement visibles si l'utilisateur
      courant est admin (cf. canValidate/canDevalidate dans renderTaskCard). */
@@ -2510,6 +2522,7 @@ function renderKanban(){
       if(!id||!newStatus) return;
       const t=TASKS.find(x=>x.id===id);
       if(!t||t.status===newStatus) return;
+      if(!canTouchTask(t)){ toast('Seule la personne assignée ou un admin peut déplacer cette tâche'); return; }
       /* Optimistic UI : on bouge la carte immédiatement pour un retour
          visuel instantané, puis on confirme côté Supabase. Si la
          sauvegarde échoue, on rollback et on prévient l'utilisateur. */
@@ -2560,27 +2573,35 @@ function openTaskForm(id){
   if(!box) return;
   const t=id?TASKS.find(x=>x.id===id):{id:null,title:'',category:LIVRABLES[0].key,projectId:'',assignee:'',deadline:'',jalon:'',link:'',status:'todo'};
   if(id&&!t){ return; }
+  /* Une tâche existante n'est modifiable que par la personne assignée ou un
+     admin. Les autres voient le détail en lecture seule. La création reste
+     ouverte à tous. */
+  const canEdit = !id || canTouchTask(t);
+  const dis = canEdit ? '' : ' disabled';
   const catOpts=LIVRABLES.map(L=>`<option value="${esc(L.key)}"${L.key===t.category?' selected':''}>${esc(L.label)}</option>`).join('');
   const whoOpts='<option value="">— personne —</option>'+TEAM.map(m=>`<option value="${esc(m.id)}"${m.id===(t.assignee||'')?' selected':''}>${esc(m.name)}</option>`).join('');
   const projOpts='<option value="">— aucun projet —</option>'+PROJECTS.map(p=>`<option value="${esc(p.id)}"${p.id===(t.projectId||'')?' selected':''}>${esc(p.title)}</option>`).join('');
   const statusOpts=KANBAN_STATUSES.map(s=>`<option value="${esc(s.key)}"${s.key===t.status?' selected':''}>${esc(s.label)}</option>`).join('');
   box.innerHTML=`
     <div class="invite-card">
-      <input id="tk-title" placeholder="Titre de la tâche" value="${esc(t.title)}" style="flex:1 1 240px">
-      <select id="tk-cat">${catOpts}</select>
-      <select id="tk-proj">${projOpts}</select>
-      <select id="tk-who">${whoOpts}</select>
-      <input id="tk-date" type="date" value="${esc(t.deadline||'')}">
-      <input id="tk-jalon" placeholder="Jalon (ex. Validation client)" value="${esc(t.jalon||'')}" style="flex:1 1 180px">
-      <input id="tk-link" placeholder="Lien Proton (https://…)" value="${esc(t.link||'')}" style="flex:1 1 220px">
-      <select id="tk-status">${statusOpts}</select>
-      <button class="btn primary sm" id="tk-save">${id?'Enregistrer':'Créer la tâche'}</button>
-      ${id?'<button class="btn sm" id="tk-del">Supprimer</button>':''}
-      <button class="btn sm" id="tk-cancel">Annuler</button>
+      <input id="tk-title" placeholder="Titre de la tâche" value="${esc(t.title)}" style="flex:1 1 240px"${dis}>
+      <select id="tk-cat"${dis}>${catOpts}</select>
+      <select id="tk-proj"${dis}>${projOpts}</select>
+      <select id="tk-who"${dis}>${whoOpts}</select>
+      <input id="tk-date" type="date" value="${esc(t.deadline||'')}"${dis}>
+      <input id="tk-jalon" placeholder="Jalon (ex. Validation client)" value="${esc(t.jalon||'')}" style="flex:1 1 180px"${dis}>
+      <input id="tk-link" placeholder="Lien Proton (https://…)" value="${esc(t.link||'')}" style="flex:1 1 220px"${dis}>
+      <select id="tk-status"${dis}>${statusOpts}</select>
+      ${canEdit?`<button class="btn primary sm" id="tk-save">${id?'Enregistrer':'Créer la tâche'}</button>`:''}
+      ${canEdit&&id?'<button class="btn sm" id="tk-del">Supprimer</button>':''}
+      <button class="btn sm" id="tk-cancel">${canEdit?'Annuler':'Fermer'}</button>
+      ${canEdit?'':'<span class="muted" style="align-self:center">Lecture seule — réservé à la personne assignée ou à un admin</span>'}
     </div>`;
-  document.getElementById('tk-save').addEventListener('click',()=>saveTaskFromForm(id));
+  if(canEdit){
+    document.getElementById('tk-save').addEventListener('click',()=>saveTaskFromForm(id));
+  }
   document.getElementById('tk-cancel').addEventListener('click',()=>{ box.innerHTML=''; });
-  if(id){ document.getElementById('tk-del').addEventListener('click',async ()=>{
+  if(canEdit&&id){ document.getElementById('tk-del').addEventListener('click',async ()=>{
     if(!confirm('Supprimer cette tâche ?')) return;
     const ok = await deleteTaskInSupabase(id);
     if(!ok) return;
@@ -2589,9 +2610,13 @@ function openTaskForm(id){
     renderKanban();
     toast('Tâche supprimée');
   }); }
-  document.getElementById('tk-title').focus();
+  if(canEdit) document.getElementById('tk-title').focus();
 }
 async function saveTaskFromForm(id){
+  if(id){
+    const _t=TASKS.find(x=>x.id===id);
+    if(!canTouchTask(_t)){ toast('Seule la personne assignée ou un admin peut modifier cette tâche'); return; }
+  }
   const title=document.getElementById('tk-title').value.trim();
   if(!title){ toast('Donnez un titre'); return; }
   const category=document.getElementById('tk-cat').value;
@@ -2677,6 +2702,10 @@ let _ganttDragMoved=false;
 document.addEventListener('mousedown',e=>{
   const bar=e.target.closest('#gantt .g-bar');
   if(!bar) return;
+  /* Déplacer/redimensionner une barre du Calendrier est réservé aux admins.
+     Pour les autres, on n'amorce pas le glissement : le clic normal continue
+     d'ouvrir la fiche projet (lecture). */
+  if(getCurrentUser().access!=='admin') return;
   const pid=bar.dataset.pid, lk=bar.dataset.lk;
   if(!pid||!lk) return;
   const p=PROJECTS.find(x=>x.id===pid);
