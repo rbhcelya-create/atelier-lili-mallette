@@ -2619,7 +2619,7 @@ function switchView(v){
   document.getElementById('view-'+v).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
   document.getElementById('crumb-current').textContent=VIEW_NAMES[v]||'';
-  document.getElementById('sidebar').classList.remove('open');
+  closeMobileNav();
   window.scrollTo({top:0,behavior:'smooth'});
   const _s=document.getElementById('search');
   if(_s){ _s.value=''; _s.placeholder=SEARCH_PLACEHOLDER[v]||'Rechercher…'; }
@@ -2654,10 +2654,16 @@ document.getElementById('search').addEventListener('input',()=>{
   }
 });
 
-/* mobile menu */
+/* mobile menu : tiroir + fond cliquable synchronisés */
+function closeMobileNav(){
+  document.getElementById('sidebar').classList.remove('open');
+  const bd=document.getElementById('nav-backdrop'); if(bd) bd.classList.remove('open');
+}
 document.getElementById('menu-toggle').addEventListener('click',()=>{
-  document.getElementById('sidebar').classList.toggle('open');
+  const open=document.getElementById('sidebar').classList.toggle('open');
+  const bd=document.getElementById('nav-backdrop'); if(bd) bd.classList.toggle('open',open);
 });
+(function(){ const bd=document.getElementById('nav-backdrop'); if(bd) bd.addEventListener('click',closeMobileNav); })();
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape') return;
   if(document.getElementById('newproj-overlay').classList.contains('open')) closeNewProjectModal();
