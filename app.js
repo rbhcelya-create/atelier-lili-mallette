@@ -1567,8 +1567,18 @@ function addMessage(){
   if(clr) clr.addEventListener('click',()=>{ mSearch.value=''; mSearch.focus(); apply(); });
 })();
 function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
+/* Fermeture au clic sur le fond — mais SEULEMENT si le geste a commencé ET
+   fini sur le fond. Sans ce garde, sélectionner un texte (ex. une URL) dans la
+   modale en glissant la souris jusqu'au fond déclenche un « click » dont la
+   cible est l'overlay → la modale se fermait par erreur. */
+function bindBackdropClose(overlay, closeFn){
+  if(!overlay) return;
+  let downOnBackdrop=false;
+  overlay.addEventListener('mousedown',e=>{ downOnBackdrop=(e.target===overlay); });
+  overlay.addEventListener('click',e=>{ if(e.target===overlay && downOnBackdrop) closeFn(); downOnBackdrop=false; });
+}
 document.getElementById('m-close').addEventListener('click',closeModal);
-document.getElementById('overlay').addEventListener('click',e=>{ if(e.target.id==='overlay') closeModal(); });
+bindBackdropClose(document.getElementById('overlay'), closeModal);
 
 /* ===== DOCUMENTS (recherche globale) ===== */
 function dsRender(){
@@ -2856,15 +2866,13 @@ loadTeamFromSupabase().then(ok => {
   if(cc) cc.addEventListener('click',exportClientDocsCSV);
   const cb=document.getElementById('cdoc-m-close');
   if(cb) cb.addEventListener('click',closeClientDocModal);
-  const ov=document.getElementById('client-doc-overlay');
-  if(ov) ov.addEventListener('click',e=>{ if(e.target.id==='client-doc-overlay') closeClientDocModal(); });
+  bindBackdropClose(document.getElementById('client-doc-overlay'), closeClientDocModal);
   /* Création de projet — bouton(s) « + Nouveau projet » présents sur le
      Tableau de bord ET sur la vue Projets, plus la modale */
   document.querySelectorAll('.new-proj-btn').forEach(b=>b.addEventListener('click',openNewProjectModal));
   const npClose=document.getElementById('newproj-close');
   if(npClose) npClose.addEventListener('click',closeNewProjectModal);
-  const npOv=document.getElementById('newproj-overlay');
-  if(npOv) npOv.addEventListener('click',e=>{ if(e.target.id==='newproj-overlay') closeNewProjectModal(); });
+  bindBackdropClose(document.getElementById('newproj-overlay'), closeNewProjectModal);
 })();
 (function(){ const b=document.getElementById('invite-btn'); if(b) b.addEventListener('click',showInviteForm); })();
 (function(){ const b=document.getElementById('task-new-btn'); if(b) b.addEventListener('click',()=>openTaskForm(null)); })();
