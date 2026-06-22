@@ -1164,7 +1164,7 @@ function showInviteForm(){
       </select>
       <button class="btn primary sm" id="inv-send">Envoyer l'invitation</button>
       <button class="btn sm" id="inv-cancel">Annuler</button>
-      <div class="invite-note">Simulation — aucun email réel n'est envoyé. L'envoi sera branché en V1 (backend + service mail).</div>
+      <div class="invite-note">La personne reçoit un courriel avec un lien d'accès. En cliquant, elle entre dans L'Atelier avec le rôle choisi.</div>
     </div>`;
   document.getElementById('inv-send').addEventListener('click',sendInvite);
   document.getElementById('inv-cancel').addEventListener('click',()=>{ box.innerHTML=''; });
@@ -1192,7 +1192,19 @@ async function sendInvite(){
   await loadTeamFromSupabase();
   document.getElementById('invite-form').innerHTML='';
   renderTeam();
-  toast('Invitation envoyée à '+email+' (simulation)');
+  /* Envoi du vrai courriel d'invitation : un lien magique qui crée le
+     compte de la personne au premier clic (shouldCreateUser:true). */
+  const redirect = window.location.origin + window.location.pathname;
+  const { error } = await supa.auth.signInWithOtp({
+    email,
+    options: { shouldCreateUser:true, emailRedirectTo: redirect }
+  });
+  if(error){
+    console.error('[Supabase] invitation signInWithOtp échec :', error.message);
+    toast('Membre ajouté, mais l’envoi du courriel a échoué : '+error.message);
+    return;
+  }
+  toast('Invitation envoyée à '+email);
 }
 
 /* ===== PROJECT MODAL ===== */
