@@ -156,10 +156,20 @@ function setCurrentUser(id){
    signInWithOtp utilise le service courriel intégré de Supabase. */
 let supaSession = null;
 function isSupaAuthed(){ return !!(supaSession && supaSession.user); }
+/* Courriels secondaires → id de membre. Permet à une personne d'avoir
+   plus d'une adresse reconnue (la table team_members n'a qu'une colonne
+   email, donc on garde les alias ici, à l'épreuve du rechargement BD). */
+const ALT_EMAILS = {
+  'bruno.lefebvre@lilimallette.education': 'bruno'
+};
 function memberByEmail(email){
   if(!email) return null;
   const e = String(email).trim().toLowerCase();
-  return TEAM.find(m => (m.email||'').trim().toLowerCase() === e) || null;
+  const byMain = TEAM.find(m => (m.email||'').trim().toLowerCase() === e);
+  if(byMain) return byMain;
+  const altId = ALT_EMAILS[e];
+  if(altId){ const m = TEAM.find(x => x.id === altId); if(m) return m; }
+  return null;
 }
 /* Applique une session Supabase : bascule le profil courant sur le
    membre correspondant à l'email connecté, puis rafraîchit l'UI. */
