@@ -173,18 +173,30 @@ function memberByEmail(email){
 }
 /* Applique une session Supabase : bascule le profil courant sur le
    membre correspondant à l'email connecté, puis rafraîchit l'UI. */
+let teamLoaded = false; /* passe à true quand l'équipe est chargée depuis Supabase */
 function applySupaSession(session){
   supaSession = session || null;
-  if(isSupaAuthed()){
-    const m = memberByEmail(supaSession.user.email);
-    if(m){
-      setCurrentUser(m.id);
-      if(m.pending) acceptPendingInvite(m);
-    }
-  }
+  reconcileSession();
   renderSidebarFoot();
   const p = document.getElementById('user-picker');
   if(p) renderPickerAuth();
+}
+/* Rattache la session connectée à un membre d'équipe. Si le courriel ne
+   correspond à aucun membre ET que l'équipe est déjà chargée, c'est un
+   courriel inconnu → on déconnecte (pas d'usurpation d'un profil admin). */
+function reconcileSession(){
+  if(!isSupaAuthed()) return;
+  const m = memberByEmail(supaSession.user.email);
+  if(m){
+    setCurrentUser(m.id);
+    if(m.pending) acceptPendingInvite(m);
+    return;
+  }
+  if(teamLoaded){
+    const mail = supaSession.user.email;
+    toast('Le courriel '+mail+' n’est rattaché à aucun membre. Demande une invitation à un admin.');
+    signOutSupa();
+  }
 }
 /* Quand une personne invitée se connecte pour la première fois (clic sur
    son lien magique), elle accepte l'invitation : on retire le statut
@@ -702,6 +714,17 @@ async function loadProjectsFromSupabase(){
     return false;
   }
   if(data.length === 0){
+    /* GARDE-FOU : si on est connecté (session Supabase) et qu'on lit 0
+       projet, c'est presque sûrement les règles RLS qui masquent les
+       lignes, PAS une table réellement vide. On NE re-seed PAS (sinon on
+       risquerait d'écraser les vrais projets) et on garde les données
+       locales déjà chargées. */
+    const { data: _sess } = await supa.auth.getSession();
+    if(_sess && _sess.session){
+      console.warn('[Supabase] 0 projet en session connectée → RLS probable. Pas de re-seed (données locales conservées).');
+      toast('Accès aux projets refusé pour ce compte — règles RLS à ajuster');
+      return false;
+    }
     console.log('[Supabase] table projects vide, seed depuis JS...');
     const rows = PROJECTS.map(p => projectToRow(p));
     /* Upsert (au lieu d'insert) pour éviter les conflits si une autre
@@ -1125,6 +1148,13 @@ async function loadTeamFromSupabase(){
     return false;
   }
   if(data.length === 0){
+    /* Même garde-fou que pour les projets : 0 membre en session connectée
+       = RLS qui masque, pas une table vide → on ne re-seed pas. */
+    const { data: _sess } = await supa.auth.getSession();
+    if(_sess && _sess.session){
+      console.warn('[Supabase] 0 membre en session connectée → RLS probable. Pas de re-seed.');
+      return false;
+    }
     console.log('[Supabase] table team_members vide, seed depuis JS...');
     const rows = TEAM.map(m => teamMemberToRow(m));
     const { error: seedError } = await supa.from('team_members').upsert(rows, { onConflict: 'id' });
@@ -2985,7 +3015,8 @@ loadTeamFromSupabase().then(ok => {
   if(!ok) return;
   /* Si déjà connecté par courriel, re-mappe au cas où les emails de la
      BD diffèrent légèrement des emails codés en dur. */
-  if(isSupaAuthed()){ const m=memberByEmail(supaSession.user.email); if(m){ setCurrentUser(m.id); if(m.pending) acceptPendingInvite(m); } }
+  teamLoaded = true;
+  reconcileSession();
   renderSidebarFoot();
   const av = document.querySelector('.nav-item.active');
   if(av && av.dataset.view === 'equipe') renderTeam();
