@@ -1077,7 +1077,7 @@ function renderTeam(){
   const list=q?TEAM.filter(m=>(m.name+' '+m.role+' '+(m.email||'')).toLowerCase().includes(q)):TEAM;
   document.getElementById('team-grid').innerHTML = list.map(m=>`
     <div class="member">
-      ${(m.pending&&isAdmin)?`<button class="m-del" data-del-member="${esc(m.id)}" title="Retirer l'invitation">&times;</button>`:''}
+      ${(isAdmin && m.id!==currentUserId)?`<button class="m-del" data-del-member="${esc(m.id)}" data-del-name="${esc(m.name)}" data-del-pending="${m.pending?'1':'0'}" title="${m.pending?'Retirer l\'invitation':'Retirer ce membre'}">&times;</button>`:''}
       <div class="m-ava" style="background:${m.color}">${initials(m.name)}</div>
       <div>
         <div class="m-name">${esc(m.name)}</div>
@@ -1087,13 +1087,19 @@ function renderTeam(){
       </div>
     </div>`).join('');
   document.querySelectorAll('#team-grid [data-del-member]').forEach(b=>b.addEventListener('click',async ()=>{
-    if(getCurrentUser().access!=='admin'){ toast('Seul un administrateur peut retirer une invitation'); return; }
+    if(getCurrentUser().access!=='admin'){ toast('Seul un administrateur peut retirer un membre'); return; }
     const id = b.dataset.delMember;
+    const nm = b.dataset.delName || 'ce membre';
+    const isPending = b.dataset.delPending==='1';
+    const msg = isPending
+      ? 'Retirer l\'invitation de '+nm+' ?'
+      : 'Retirer '+nm+' de l\'équipe ? La personne perdra l\'accès à sa prochaine connexion.';
+    if(!confirm(msg)) return;
     const ok = await deleteTeamMemberFromSupabase(id);
     if(!ok) return;
     await loadTeamFromSupabase();
     renderTeam();
-    toast('Invitation retirée');
+    toast(isPending ? 'Invitation retirée' : nm+' retiré·e de l\'équipe');
   }));
 }
 
