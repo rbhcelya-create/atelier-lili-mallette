@@ -144,6 +144,7 @@ function setCurrentUser(id){
      (Kanban affiche les boutons Valider/Dévalider uniquement aux admins). */
   const av = document.querySelector('.nav-item.active');
   if(av && av.dataset.view === 'kanban') renderKanban();
+  else if(av && av.dataset.view === 'equipe') renderTeam();
 }
 
 /* Pipeline d'après le schéma client : Texte > Mise en forme,
@@ -932,10 +933,14 @@ function showUserPicker(){
 /* ===== TEAM ===== */
 function renderTeam(){
   const q=topQ();
+  const isAdmin=getCurrentUser().access==='admin';
+  const invBtn=document.getElementById('invite-btn');
+  if(invBtn) invBtn.style.display=isAdmin?'':'none';
+  if(!isAdmin){ const f=document.getElementById('invite-form'); if(f) f.innerHTML=''; }
   const list=q?TEAM.filter(m=>(m.name+' '+m.role+' '+(m.email||'')).toLowerCase().includes(q)):TEAM;
   document.getElementById('team-grid').innerHTML = list.map(m=>`
     <div class="member">
-      ${m.pending?`<button class="m-del" data-del-member="${esc(m.id)}" title="Retirer l'invitation">&times;</button>`:''}
+      ${(m.pending&&isAdmin)?`<button class="m-del" data-del-member="${esc(m.id)}" title="Retirer l'invitation">&times;</button>`:''}
       <div class="m-ava" style="background:${m.color}">${initials(m.name)}</div>
       <div>
         <div class="m-name">${esc(m.name)}</div>
@@ -945,6 +950,7 @@ function renderTeam(){
       </div>
     </div>`).join('');
   document.querySelectorAll('#team-grid [data-del-member]').forEach(b=>b.addEventListener('click',async ()=>{
+    if(getCurrentUser().access!=='admin'){ toast('Seul un administrateur peut retirer une invitation'); return; }
     const id = b.dataset.delMember;
     const ok = await deleteTeamMemberFromSupabase(id);
     if(!ok) return;
@@ -1046,6 +1052,7 @@ async function deleteTeamMemberFromSupabase(id){
   return true;
 }
 function showInviteForm(){
+  if(getCurrentUser().access!=='admin'){ toast('Seul un administrateur peut inviter un membre'); return; }
   const box=document.getElementById('invite-form');
   if(!box) return;
   box.innerHTML=`
@@ -1065,6 +1072,7 @@ function showInviteForm(){
   document.getElementById('inv-name').focus();
 }
 async function sendInvite(){
+  if(getCurrentUser().access!=='admin'){ toast('Seul un administrateur peut inviter un membre'); return; }
   const name=(document.getElementById('inv-name').value||'').trim();
   const email=(document.getElementById('inv-email').value||'').trim();
   const access=document.getElementById('inv-access').value;
