@@ -417,15 +417,16 @@ function generateFileName({nomOriginal, projetId, categorie}){
   const code=cat?cat.code:'XXX';
   return `${slugProj}_${code}_${slugOrig}`;
 }
-/* Lien Proton du dossier de destination, dérivé du projet + catégorie.
-   Renseigné une fois par projet/catégorie, réutilisé pour tous les documents
-   de cette combinaison. Si le projet n'a pas encore de lien, on retombe sur
-   l'ancien champ `lienProton` du document (compat) puis sur ''. */
+/* Lien Proton d'un document. Il est désormais PROPRE À CHAQUE document
+   (d.lienProton). On ne retombe sur l'ancien lien partagé projet+catégorie
+   (project.folderLinks[categorie]) que pour les anciens documents qui n'ont
+   pas encore leur propre lien (compat), puis sur ''. */
 function docFolderLink(d){
   if(!d) return '';
+  if(d.lienProton) return d.lienProton;
   const p=PROJECTS.find(x=>x.id===d.projetId);
   if(p&&p.folderLinks&&p.folderLinks[d.categorie]) return p.folderLinks[d.categorie];
-  return d.lienProton||'';
+  return '';
 }
 function setProjectFolderLink(projetId, categorie, url){
   const p=PROJECTS.find(x=>x.id===projetId);
@@ -2100,9 +2101,12 @@ function openClientDocModal(id){
         <button type="button" class="btn primary" id="cdf-save" disabled>Enregistrer</button>
       </div>
     </div>`;
-  const st={date:d.date||todayIso,sujet:d.sujet||'',projetId:d.projetId||'',categorie:d.categorie||'',initiales:d.initiales||'BL',version:d.version||1,lienProton:d.lienProton||'',resume:d.resume||''};
+  /* Le lien Proton est propre au document. Pour un document existant qui n'a
+     pas encore son propre lien, on adopte l'ancien lien partagé projet+catégorie
+     (compat) ; il deviendra propre au document dès le prochain enregistrement. */
+  const st={date:d.date||todayIso,sujet:d.sujet||'',projetId:d.projetId||'',categorie:d.categorie||'',initiales:d.initiales||'BL',version:d.version||1,lienProton:(d.lienProton||(isEdit?docFolderLink({projetId:d.projetId,categorie:d.categorie}):'')),resume:d.resume||''};
 
-  /* Step 5 — workflow dossier Proton (lien per projet+catégorie, partagé) */
+  /* Step 5 — lien Proton PROPRE à ce document */
   const renderStep5=()=>{
     const zone=document.getElementById('cdf-folder-zone');
     if(!zone) return;
@@ -2112,7 +2116,7 @@ function openClientDocModal(id){
     }
     const proj=PROJECTS.find(x=>x.id===st.projetId);
     const cat=DOC_CATEGORIES_CLIENT.find(x=>x.key===st.categorie);
-    const url=docFolderLink({projetId:st.projetId,categorie:st.categorie});
+    const url=st.lienProton;
     const ctx=`${esc(proj?proj.title:'')} · ${esc(cat?cat.label:st.categorie)}`;
     if(isHttpUrl(url)){
       zone.innerHTML=`
@@ -2144,23 +2148,22 @@ function openClientDocModal(id){
       <div class="doc-folder-context">${ctx}</div>
       <input id="cdf-folder-input" type="url" placeholder="https://drive.proton.me/…" value="${esc(currentUrl||'')}">
       <div class="doc-folder-actions">
-        <button type="button" class="btn primary sm" id="cdf-folder-save">Enregistrer ce lien pour ${ctx}</button>
+        <button type="button" class="btn primary sm" id="cdf-folder-save">Valider ce lien</button>
         ${currentUrl?'<button type="button" class="btn sm" id="cdf-folder-cancel">Annuler</button>':''}
       </div>
-      <div class="doc-step-instruction muted">Ce lien sera réutilisé pour tous les futurs documents de cette combinaison projet · catégorie.</div>`;
+      <div class="doc-step-instruction muted">Ce lien est propre à ce document.</div>`;
     const input=document.getElementById('cdf-folder-input');
     const saveBtn=document.getElementById('cdf-folder-save');
     const updateBtn=()=>{ saveBtn.disabled=!isHttpUrl(input.value.trim()); };
-    input.addEventListener('input',()=>{ updateBtn(); refresh(); });
+    input.addEventListener('input',()=>{ st.lienProton=input.value.trim(); updateBtn(); refresh(); });
     updateBtn();
     saveBtn.addEventListener('click',()=>{
       const v=input.value.trim();
       if(!isHttpUrl(v)){ toast('Lien invalide — il doit commencer par https://'); return; }
-      if(setProjectFolderLink(st.projetId,st.categorie,v)){
-        toast('Lien du dossier enregistré');
-        renderStep5();
-        refresh();
-      }
+      st.lienProton=v;
+      toast('Lien enregistré pour ce document');
+      renderStep5();
+      refresh();
     });
     const cancel=document.getElementById('cdf-folder-cancel');
     if(cancel) cancel.addEventListener('click',()=>{ renderStep5(); refresh(); });
@@ -2174,12 +2177,8 @@ function openClientDocModal(id){
     const save=document.getElementById('cdf-save');
     if(name){ prev.textContent=name; prev.classList.remove('empty'); copy.disabled=false; }
     else { prev.textContent='Le nom apparaîtra ici…'; prev.classList.add('empty'); copy.disabled=true; }
-    /* Validation : nom + projet + cat + responsable + un lien dossier valide
-       (soit déjà connu via docFolderLink, soit en train d'être saisi inline). */
-    const folderUrl = (st.projetId && st.categorie) ? docFolderLink({projetId:st.projetId,categorie:st.categorie}) : '';
-    const inlineInput = document.getElementById('cdf-folder-input');
-    const effectiveFolder = isHttpUrl(folderUrl) ? folderUrl : (inlineInput ? inlineInput.value.trim() : '');
-    save.disabled=!(st.date&&st.sujet.trim()&&st.projetId&&st.categorie&&st.initiales&&isHttpUrl(effectiveFolder));
+    /* Validation : nom + projet + cat + responsable + le lien propre au document. */
+    save.disabled=!(st.date&&st.sujet.trim()&&st.projetId&&st.categorie&&st.initiales&&isHttpUrl(st.lienProton));
   };
   document.getElementById('cdf-date').addEventListener('change',e=>{ st.date=e.target.value||todayIso; refresh(); });
   document.getElementById('cdf-proj').addEventListener('change',e=>{ st.projetId=e.target.value; renderStep5(); refresh(); });
@@ -2199,14 +2198,10 @@ function openClientDocModal(id){
   });
   document.getElementById('cdf-cancel').addEventListener('click',closeClientDocModal);
   document.getElementById('cdf-save').addEventListener('click',()=>{
-    /* Si l'utilisateur a saisi un lien dossier inline mais n'a pas cliqué
-       « Enregistrer ce lien », on le persiste automatiquement avant de
-       sauvegarder le document — comme l'ancienne section 2. */
+    /* Si un lien est en cours de saisie inline (pas encore validé), on le
+       prend en compte pour ce document avant d'enregistrer. */
     const inlineInput=document.getElementById('cdf-folder-input');
-    if(inlineInput){
-      const v=inlineInput.value.trim();
-      if(isHttpUrl(v)) setProjectFolderLink(st.projetId,st.categorie,v);
-    }
+    if(inlineInput){ const v=inlineInput.value.trim(); if(isHttpUrl(v)) st.lienProton=v; }
     saveClientDocFromForm(id,st);
   });
   if(isEdit){
