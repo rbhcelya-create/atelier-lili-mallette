@@ -147,6 +147,93 @@ function setCurrentUser(id){
   else if(av && av.dataset.view === 'equipe') renderTeam();
 }
 
+/* ===== AUTH SUPABASE — connexion par lien magique (Étape 1) =====
+   Vraie authentification : la personne entre son courriel, reçoit un
+   « lien magique » à cliquer, et revient connectée. On mappe son
+   courriel → membre d'équipe pour retrouver son nom/rôle.
+   Le sélecteur de profil manuel reste dispo en parallèle le temps de
+   valider ; il sera retiré à l'étape 2. Aucune clé secrète ici :
+   signInWithOtp utilise le service courriel intégré de Supabase. */
+let supaSession = null;
+function isSupaAuthed(){ return !!(supaSession && supaSession.user); }
+function memberByEmail(email){
+  if(!email) return null;
+  const e = String(email).trim().toLowerCase();
+  return TEAM.find(m => (m.email||'').trim().toLowerCase() === e) || null;
+}
+/* Applique une session Supabase : bascule le profil courant sur le
+   membre correspondant à l'email connecté, puis rafraîchit l'UI. */
+function applySupaSession(session){
+  supaSession = session || null;
+  if(isSupaAuthed()){
+    const m = memberByEmail(supaSession.user.email);
+    if(m) setCurrentUser(m.id);
+  }
+  renderSidebarFoot();
+  const p = document.getElementById('user-picker');
+  if(p) renderPickerAuth();
+}
+/* Envoie le lien magique. Réservé aux courriels déjà dans l'équipe
+   (shouldCreateUser:false) — pas d'inscription sauvage à l'étape 1. */
+async function startMagicLink(email){
+  if(!supa){ toast('Supabase indisponible'); return; }
+  const e = String(email||'').trim().toLowerCase();
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)){ toast('Adresse courriel invalide'); return; }
+  if(!memberByEmail(e)){ toast('Ce courriel n’est pas reconnu dans l’équipe'); return; }
+  const redirect = window.location.origin + window.location.pathname;
+  const { error } = await supa.auth.signInWithOtp({
+    email: e,
+    options: { shouldCreateUser:false, emailRedirectTo: redirect }
+  });
+  if(error){
+    console.error('[Supabase] signInWithOtp échec :', error.message);
+    toast('Échec de l’envoi : '+error.message);
+    return;
+  }
+  toast('Lien de connexion envoyé à '+e+' — vérifie ta boîte courriel');
+}
+async function signOutSupa(){
+  if(!supa) return;
+  await supa.auth.signOut();
+  supaSession = null;
+  renderSidebarFoot();
+  const p = document.getElementById('user-picker');
+  if(p) renderPickerAuth();
+  toast('Déconnecté de la connexion par courriel');
+}
+/* Remplit la zone auth du picker selon l'état de connexion. */
+function renderPickerAuth(){
+  const box = document.getElementById('up-auth');
+  if(!box) return;
+  if(isSupaAuthed()){
+    box.innerHTML =
+      `<div class="up-auth-state">🔒 Connecté par courriel<br><b>${esc(supaSession.user.email)}</b></div>`+
+      `<button class="up-auth-btn" id="up-signout">Se déconnecter</button>`;
+    const b=document.getElementById('up-signout');
+    if(b) b.addEventListener('click', async e=>{ e.stopPropagation(); await signOutSupa(); });
+  } else {
+    box.innerHTML =
+      `<button class="up-auth-btn primary" id="up-magic">Se connecter par courriel</button>`+
+      `<form class="up-auth-form" id="up-form" style="display:none">`+
+        `<input id="up-email" type="email" placeholder="ton adresse courriel" autocomplete="email">`+
+        `<button type="submit" class="up-auth-btn primary">Envoyer le lien</button>`+
+      `</form>`+
+      `<div class="up-auth-note">Vraie connexion : tu reçois un lien à cliquer dans ton courriel. Le sélecteur ci-dessus reste dispo en attendant.</div>`;
+    const mb=document.getElementById('up-magic');
+    if(mb) mb.addEventListener('click', e=>{
+      e.stopPropagation();
+      document.getElementById('up-form').style.display='flex';
+      mb.style.display='none';
+      document.getElementById('up-email').focus();
+    });
+    const f=document.getElementById('up-form');
+    if(f) f.addEventListener('submit', e=>{
+      e.preventDefault(); e.stopPropagation();
+      startMagicLink(document.getElementById('up-email').value);
+    });
+  }
+}
+
 /* Pipeline d'après le schéma client : Texte > Mise en forme,
    Fiche pédagogique en parallèle, Images, puis les livrables
    (Balado / Vidéo / Spectacle, en parallèle), puis Site internet /
@@ -909,9 +996,11 @@ function showUserPicker(){
         ${m.id === currentUserId ? '<span class="user-picker-check">✓</span>' : ''}
       </button>
     `).join('')}
+    <div class="user-picker-auth" id="up-auth"></div>
     <div class="user-picker-foot">Ton choix sera mémorisé sur ce navigateur. Tes commentaires seront attribués au membre sélectionné.</div>
   `;
   document.body.appendChild(picker);
+  renderPickerAuth();
   picker.querySelectorAll('[data-uid]').forEach(btn => btn.addEventListener('click', e => {
     e.stopPropagation();
     setCurrentUser(btn.dataset.uid);
@@ -2857,10 +2946,20 @@ loadProjectsFromSupabase().then(ok => {
    (avatar + nom) au cas où le user courant aurait changé d'avatar/role. */
 loadTeamFromSupabase().then(ok => {
   if(!ok) return;
+  /* Si déjà connecté par courriel, re-mappe au cas où les emails de la
+     BD diffèrent légèrement des emails codés en dur. */
+  if(isSupaAuthed()){ const m=memberByEmail(supaSession.user.email); if(m) setCurrentUser(m.id); }
   renderSidebarFoot();
   const av = document.querySelector('.nav-item.active');
   if(av && av.dataset.view === 'equipe') renderTeam();
 });
+
+/* Auth Supabase : récupère la session au chargement (retour de lien
+   magique, ou session déjà active) et écoute les changements d'état. */
+if(supa){
+  supa.auth.getSession().then(({data}) => { applySupaSession(data.session); });
+  supa.auth.onAuthStateChange((_event, session) => { applySupaSession(session); });
+}
 (function(){
   /* Module Mes documents (ex-Nomenclature client) — boutons + modale */
   const cn=document.getElementById('cdoc-new-btn');

@@ -1161,6 +1161,30 @@ h1.title{
   border-top:1px solid var(--line);
   background:var(--surface-2);
 }
+.user-picker-auth{
+  display:flex;flex-direction:column;gap:8px;
+  padding:11px 14px;
+  border-top:1px solid var(--line);
+}
+.up-auth-btn{
+  width:100%;padding:8px 10px;
+  border:1px solid var(--line);border-radius:8px;
+  background:var(--surface);color:var(--ink);
+  font-size:12.5px;font-weight:600;cursor:pointer;
+  transition:background .1s,border-color .1s;
+}
+.up-auth-btn:hover{background:var(--surface-2)}
+.up-auth-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.up-auth-btn.primary:hover{filter:brightness(.95)}
+.up-auth-form{display:flex;flex-direction:column;gap:8px}
+.up-auth-form input{
+  width:100%;padding:8px 10px;
+  border:1px solid var(--line);border-radius:8px;
+  background:var(--surface);color:var(--ink);font-size:12.5px;
+}
+.up-auth-note{font-size:10.5px;color:var(--ink-3);line-height:1.4}
+.up-auth-state{font-size:11.5px;color:var(--ink-2);line-height:1.5}
+.up-auth-state b{color:var(--ink);word-break:break-all}
 
 /* responsive */
 @media (max-width:1080px){
