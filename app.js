@@ -177,11 +177,26 @@ function applySupaSession(session){
   supaSession = session || null;
   if(isSupaAuthed()){
     const m = memberByEmail(supaSession.user.email);
-    if(m) setCurrentUser(m.id);
+    if(m){
+      setCurrentUser(m.id);
+      if(m.pending) acceptPendingInvite(m);
+    }
   }
   renderSidebarFoot();
   const p = document.getElementById('user-picker');
   if(p) renderPickerAuth();
+}
+/* Quand une personne invitée se connecte pour la première fois (clic sur
+   son lien magique), elle accepte l'invitation : on retire le statut
+   « en attente » → elle devient membre confirmé. */
+async function acceptPendingInvite(member){
+  if(!member || !member.pending) return;
+  member.pending = false;
+  const ok = await upsertTeamMemberInSupabase(member);
+  renderSidebarFoot();
+  const av = document.querySelector('.nav-item.active');
+  if(av && av.dataset.view === 'equipe') renderTeam();
+  if(ok) toast('Bienvenue dans l’équipe, '+member.name+' !');
 }
 /* Envoie le lien magique. Réservé aux courriels déjà dans l'équipe
    (shouldCreateUser:false) — pas d'inscription sauvage à l'étape 1. */
@@ -2970,7 +2985,7 @@ loadTeamFromSupabase().then(ok => {
   if(!ok) return;
   /* Si déjà connecté par courriel, re-mappe au cas où les emails de la
      BD diffèrent légèrement des emails codés en dur. */
-  if(isSupaAuthed()){ const m=memberByEmail(supaSession.user.email); if(m) setCurrentUser(m.id); }
+  if(isSupaAuthed()){ const m=memberByEmail(supaSession.user.email); if(m){ setCurrentUser(m.id); if(m.pending) acceptPendingInvite(m); } }
   renderSidebarFoot();
   const av = document.querySelector('.nav-item.active');
   if(av && av.dataset.view === 'equipe') renderTeam();
