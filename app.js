@@ -113,7 +113,7 @@ const TEAM = [
   { id:'fred',  name:'Frédérick Rouleau',   role:'Univers visuel',                access:'editeur', color:'#6E8E63', initiales:'FR', email:'frederouleau@proton.me' },
   { id:'bruno', name:'Bruno Lefebvre',      role:'Réalisation sonore & musicale', access:'admin',   color:'#2F4259', initiales:'BL', email:'bruno.lefebvre1962@pm.me' },
   { id:'anne',  name:'Anne Kichenapanaïdou', role:'Coordonnatrice',                access:'admin',   color:'#C28A2C', initiales:'AK', email:'anne.kichenapanaidou@lilimallette.education' },
-  { id:'line',  name:'Line Durocher',        role:'Fiche pédagogique',             access:'editeur', color:'#8C8270', initiales:'LD' },
+  { id:'line',  name:'Line Durocher',        role:'Fiche pédagogique',             access:'editeur', color:'#8C8270', initiales:'LD', email:'lilisunshine21@hotmail.com' },
   { id:'ana',   name:'Ana de Rosario',      role:'Marketing & réseaux sociaux',   access:'editeur', color:'#B07560', initiales:'AR', email:'anacarolinadorosario@proton.me' }
 ];
 const memberById = id => TEAM.find(m=>m.id===id) || {name:'?',color:'#8C8270'};
@@ -211,7 +211,9 @@ async function acceptPendingInvite(member){
   if(ok) toast('Bienvenue dans l’équipe, '+member.name+' !');
 }
 /* Envoie le lien magique. Réservé aux courriels déjà dans l'équipe
-   (shouldCreateUser:false) — pas d'inscription sauvage à l'étape 1. */
+   (gated par memberByEmail — pas d'inscription sauvage). shouldCreateUser:true
+   pour qu'un membre reconnu qui n'a jamais eu de compte puisse créer son
+   accès au premier clic, sans invitation séparée. */
 async function startMagicLink(email){
   if(!supa){ toast('Supabase indisponible'); return; }
   const e = String(email||'').trim().toLowerCase();
@@ -220,7 +222,7 @@ async function startMagicLink(email){
   const redirect = window.location.origin + window.location.pathname;
   const { error } = await supa.auth.signInWithOtp({
     email: e,
-    options: { shouldCreateUser:false, emailRedirectTo: redirect }
+    options: { shouldCreateUser:true, emailRedirectTo: redirect }
   });
   if(error){
     console.error('[Supabase] signInWithOtp échec :', error.message);
