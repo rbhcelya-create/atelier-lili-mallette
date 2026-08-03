@@ -130,6 +130,9 @@ a{color:inherit}
 .topbar .search{
   margin-left:auto;position:relative;
 }
+/* Masquée sur la page Documents : le panneau « Rechercher un document » y tient
+   déjà le même rôle, on avait deux champs identiques à l'écran. */
+.topbar .search.hide{display:none}
 .topbar .search input{
   width:230px;background:var(--surface);border:1px solid var(--line);
   border-radius:var(--radius-sm);padding:8px 12px 8px 32px;

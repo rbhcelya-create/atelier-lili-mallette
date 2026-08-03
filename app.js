@@ -2065,7 +2065,6 @@ function renderDocs(){
      Synchronisé avec la barre du topbar. */
   const panel=document.getElementById('ds-panel');
   if(panel){
-    const topVal = (document.getElementById('search')||{}).value || '';
     /* Options des dropdowns */
     const projOpts = `<option value="tous">Tous les projets</option>`+
       PROJECTS.map(p=>`<option value="${esc(p.id)}"${p.id===cdocProj?' selected':''}>${esc(p.title)}</option>`).join('');
@@ -2078,7 +2077,7 @@ function renderDocs(){
     const yearOpts = `<option value="tous">Toutes les années</option>`+
       years.map(y=>`<option value="${esc(y)}"${y===cdocYear?' selected':''}>${esc(y)}</option>`).join('');
     panel.innerHTML = `
-      <input id="ds-q" class="ds-input" placeholder="Sujet, projet, responsable, date… (ex : « Filou », « Bruno », « 2026-05 »)" value="${esc(topVal)}">
+      <input id="ds-q" class="ds-input" placeholder="Sujet, projet, responsable, date… (ex : « Filou », « Bruno », « 2026-05 »)" value="${esc(cdocQ)}">
       <div class="ds-filters">
         <label>Projet<select id="ds-proj">${projOpts}</select></label>
         <label>Catégorie<select id="ds-cat">${catOpts}</select></label>
@@ -2088,13 +2087,7 @@ function renderDocs(){
     `;
     /* Wiring */
     const dsq=document.getElementById('ds-q');
-    if(dsq){
-      dsq.addEventListener('input',()=>{
-        const topInput=document.getElementById('search');
-        if(topInput) topInput.value=dsq.value;
-        renderClientDocs();
-      });
-    }
+    if(dsq) dsq.addEventListener('input',()=>{ cdocQ=dsq.value; renderClientDocs(); });
     document.getElementById('ds-proj').addEventListener('change',e=>{ cdocProj=e.target.value; renderClientDocs(); });
     document.getElementById('ds-cat').addEventListener('change',e=>{ cdocCat=e.target.value; renderClientDocs(); });
     document.getElementById('ds-who').addEventListener('change',e=>{ cdocWho=e.target.value; renderClientDocs(); });
@@ -2416,6 +2409,11 @@ function generateClientFileName({date, sujet, categorie, initiales, version}){
   return `${date}_${cleanSujet}_${code}_${init}_v_${v}`;
 }
 
+/* Recherche propre à la page Documents. Elle vivait dans la barre du topbar,
+   recopiée dans le panneau « Rechercher un document » : deux champs identiques
+   à l'écran. Le panneau est désormais la seule source, et la barre du topbar
+   est masquée sur cette page. */
+let cdocQ='';
 let cdocCat='tous';
 let cdocWho='tous';
 let cdocProj='tous';
@@ -2435,7 +2433,7 @@ function renderClientDocs(){
   /* Les filtres sont désormais dans le panneau du haut (ds-panel) :
      Projet, Catégorie, Responsable, Année + recherche texte. La grille
      « Mes documents » plus bas affiche le résultat filtré. */
-  const q = topQ();
+  const q = cdocQ.toLowerCase().trim();
   let list=DOCUMENTS_CLIENT.slice();
   if(cdocProj!=='tous') list=list.filter(d=>d.projetId===cdocProj);
   if(cdocCat!=='tous') list=list.filter(d=>d.categorie===cdocCat);
@@ -3137,7 +3135,9 @@ async function saveTaskFromForm(id){
 
 /* ===== NAV ===== */
 const VIEW_NAMES={dashboard:'Tableau de bord',projets:'Projets',docs:'Documents',kanban:'Tâches',gantt:'Calendrier',equipe:'Équipe'};
-const SEARCH_PLACEHOLDER={dashboard:'Rechercher un projet…',projets:'Rechercher un projet…',docs:'Rechercher un document…',kanban:'Rechercher une tâche…',gantt:'Rechercher un projet…',equipe:'Rechercher un membre…'};
+/* Pas d'entrée `docs` : la page Documents a son propre champ de recherche dans
+   le panneau, la barre du topbar y est masquée. */
+const SEARCH_PLACEHOLDER={dashboard:'Rechercher un projet…',projets:'Rechercher un projet…',kanban:'Rechercher une tâche…',gantt:'Rechercher un projet…',equipe:'Rechercher un membre…'};
 function switchView(v){
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
@@ -3147,6 +3147,7 @@ function switchView(v){
   window.scrollTo({top:0,behavior:'smooth'});
   const _s=document.getElementById('search');
   if(_s){ _s.value=''; _s.placeholder=SEARCH_PLACEHOLDER[v]||'Rechercher…'; }
+  document.querySelector('.topbar .search')?.classList.toggle('hide', v==='docs');
   if(v==='dashboard') renderDashboard();
   if(v==='projets') renderProjets();
   if(v==='docs') renderDocs();
@@ -3170,12 +3171,6 @@ document.getElementById('search').addEventListener('input',()=>{
   else if(v==='gantt') renderGantt();
   else if(v==='equipe') renderTeam();
   else if(v==='kanban') renderKanban();
-  else if(v==='docs'){
-    /* Synchronise l'input du panneau « Rechercher un document » */
-    const dsq=document.getElementById('ds-q');
-    if(dsq) dsq.value=document.getElementById('search').value;
-    renderClientDocs();
-  }
 });
 
 /* mobile menu : tiroir + fond cliquable synchronisés */
