@@ -563,10 +563,36 @@ function setProjectFolderLink(projetId, categorie, url){
   saveState();
   return true;
 }
+/* Clé réservée dans p.docs[livrable] : identifiants des documents de
+   DOCUMENTS_CLIENT rattachés À LA MAIN à ce livrable. Elle vit dans la colonne
+   `docs` (déjà persistée en BD et en localStorage) — aucune migration. Les
+   compteurs de liens Proton doivent donc l'ignorer. */
+const RATT_KEY='__rattaches';
 function livDocs(p,lk){ p.docs=p.docs||{}; if(!p.docs[lk]) p.docs[lk]={}; return p.docs[lk]; }
-function folderLinks(p,lk,fname){ const d=(p.docs&&p.docs[lk])||{}; return d[fname]||[]; }
-function livLinkCount(p,lk){ const d=(p.docs&&p.docs[lk])||{}; return Object.values(d).reduce((a,arr)=>a+(arr?arr.length:0),0); }
-function totalLinks(p){ let n=0; Object.values(p.docs||{}).forEach(f=>Object.values(f||{}).forEach(arr=>{ n+=arr?arr.length:0; })); return n; }
+function folderLinks(p,lk,fname){ if(fname===RATT_KEY) return []; const d=(p.docs&&p.docs[lk])||{}; return d[fname]||[]; }
+function livLinkCount(p,lk){
+  const d=(p.docs&&p.docs[lk])||{};
+  return Object.keys(d).reduce((a,k)=>k===RATT_KEY?a:a+((d[k]&&d[k].length)||0),0);
+}
+function totalLinks(p){
+  let n=0;
+  Object.values(p.docs||{}).forEach(f=>Object.keys(f||{}).forEach(k=>{ if(k!==RATT_KEY) n+=(f[k]&&f[k].length)||0; }));
+  return n;
+}
+/* Documents rattachés à un livrable, dans l'ordre de rattachement, purgés des
+   identifiants devenus introuvables (document supprimé ailleurs). */
+function livAttachedIds(p,lk){
+  const arr=(p.docs&&p.docs[lk]&&p.docs[lk][RATT_KEY])||[];
+  return Array.isArray(arr)?arr:[];
+}
+function livAttachedDocs(p,lk){
+  return livAttachedIds(p,lk).map(id=>DOCUMENTS_CLIENT.find(d=>d.id===id)).filter(Boolean);
+}
+function setLivAttached(p,lk,ids){
+  const d=livDocs(p,lk);
+  if(ids.length) d[RATT_KEY]=ids; else delete d[RATT_KEY];
+  saveState();
+}
 function fmtIso(d){
   const m=String(d.getMonth()+1).padStart(2,'0');
   const day=String(d.getDate()).padStart(2,'0');
@@ -1265,6 +1291,11 @@ let currentId=null;
 let modalQuery='';
 let currentLivrable=null;
 let currentDocFolder=null;
+let livPicker=false;      /* écran de sélection « rattacher des documents » */
+let livPickerQuery='';
+let docsPicker=false;     /* écran « lier un document existant » (onglet Documents) */
+let docsPickerQuery='';
+let modalTab='livr';   /* onglet de la modale projet : 'livr' | 'docs' */
 const mqHit = txt => !modalQuery || String(txt||'').toLowerCase().includes(modalQuery);
 
 /* ===== NEW PROJECT MODAL — création d'un nouveau projet ===== */
@@ -1526,7 +1557,12 @@ function openProject(id, source, initLiv){
   }
 
   /* recherche locale + panneaux */
+  /* Onglet d'accueil = Documents : les dossiers de liens des livrables sont
+     quasi tous vides (4 remplis sur 500), on ouvrait donc sur un écran vide.
+     Exception : arrivée depuis le Calendrier sur un livrable précis. */
   modalQuery=''; currentLivrable=initLiv||null; currentDocFolder=null;
+  livPicker=false; livPickerQuery=''; docsPicker=false; docsPickerQuery='';
+  modalTab=initLiv?'livr':'docs';
   const ms=document.getElementById('m-search');
   if(ms){ ms.value=''; ms.parentElement.classList.remove('has-q'); }
   renderModalPanels(p);
@@ -1586,6 +1622,205 @@ function wireLinkRows(scope,p){
     if(arr.length>+i){ arr.splice(+i,1); saveState(); renderModalMain(p); toast('Lien retiré'); }
   }));
 }
+/* ===== Onglet « Documents » de la modale projet =====
+   Le lien projet↔document se fait par la DONNÉE (d.projetId), jamais à la main :
+   tout document de DOCUMENTS_CLIENT rattaché au projet apparaît ici. */
+function projectDocs(p){
+  return DOCUMENTS_CLIENT.filter(d=>d.projetId===p.id)
+    .slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+}
+function modalTabsHtml(p){
+  const n=projectDocs(p).length;
+  return `<div class="mtabs">
+    <button type="button" class="mtab${modalTab==='livr'?' active':''}" data-mtab="livr">Livrables</button>
+    <button type="button" class="mtab${modalTab==='docs'?' active':''}" data-mtab="docs">Documents<span class="mtab-c">${n}</span></button>
+  </div>`;
+}
+function wireModalTabs(scope,p){
+  scope.querySelectorAll('[data-mtab]').forEach(b=>b.addEventListener('click',()=>{
+    if(modalTab===b.dataset.mtab) return;
+    modalTab=b.dataset.mtab;
+    renderModalMain(p);
+  }));
+}
+function projectDocRow(d,actionHtml,metaExtra){
+  const cat=DOC_CATEGORIES_CLIENT.find(c=>c.key===d.categorie);
+  const author=TEAM.find(m=>m.initiales===d.initiales);
+  const name=generateClientFileName({date:d.date,sujet:d.sujet,categorie:d.categorie,initiales:d.initiales,version:d.version});
+  const url=docFolderLink(d);
+  const ok=isHttpUrl(url);
+  return `<div class="pdoc" data-pdocid="${esc(d.id)}">
+    <div class="pdoc-main">
+      <div class="pdoc-n">${esc(name||'(nom incomplet)')}</div>
+      <div class="pdoc-meta">
+        <span class="badge doc-cat-${esc(d.categorie)}">${esc(cat?cat.label:d.categorie)}</span>
+        ${author
+          ? `<span class="ava-sm" style="background:${author.color}" title="${esc(author.name)}">${esc(author.initiales)}</span>`
+          : `<span class="ava-sm" style="background:var(--ink-3)" title="Responsable inconnu">${esc(d.initiales||'?')}</span>`}
+        <span class="pdoc-date">${esc(fmtDate(d.date))}</span>
+        ${metaExtra||''}
+      </div>
+      ${d.resume?`<div class="pdoc-resume">${esc(d.resume)}</div>`:''}
+    </div>
+    ${ok
+      ? `<a class="btn sm pdoc-open" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Ouvrir sur Proton ↗</a>`
+      : `<span class="pdoc-nolink">Aucun lien</span>`}
+    ${actionHtml||''}
+  </div>`;
+}
+/* Les quatre dossiers d'un livrable portent le nom des quatre catégories de
+   documents : le contenu se DÉDUIT donc de la donnée, sans rien ressaisir.
+   Un document créé dans le projet apparaît tout de suite dans le bon dossier. */
+const FOLDER_CAT={'Image':'images','Images':'images','Vidéo':'video','Texte':'texte','Audio':'audio'};
+function folderDocs(p,fname){
+  const c=FOLDER_CAT[fname];
+  return c?projectDocs(p).filter(d=>d.categorie===c):[];
+}
+function nDoc(n){ return n+' document'+(n>1?'s':''); }
+function nLien(n){ return n+' lien'+(n>1?'s':''); }
+/* Tant qu'un projet porte les cinq livrables, ses documents se retrouvent dans
+   les dossiers de chacun : on précise « du projet » pour que le compte ne se
+   lise pas comme un contenu propre au livrable. */
+function livMeta(p,lk){
+  const nl=livLinkCount(p,lk), nd=projectDocs(p).length;
+  return nDoc(nd)+' du projet'+(nl?' · '+nLien(nl):'');
+}
+function folderMeta(p,lk,fname){
+  const nl=folderLinks(p,lk,fname).length, nd=folderDocs(p,fname).length;
+  return nl?nDoc(nd)+' · '+nLien(nl):nDoc(nd);
+}
+function docHay(d){
+  const cat=DOC_CATEGORIES_CLIENT.find(c=>c.key===d.categorie);
+  return [generateClientFileName({date:d.date,sujet:d.sujet,categorie:d.categorie,initiales:d.initiales,version:d.version}),
+          d.sujet,cat?cat.label:d.categorie,d.initiales,d.date,d.resume].join(' ').toLowerCase();
+}
+/* Écran de rattachement : on choisit À LA MAIN, parmi les documents DU PROJET,
+   ceux qui appartiennent à ce livrable. Chaque clic écrit tout de suite ; on ne
+   redessine que la ligne touchée pour ne pas perdre la position de lecture. */
+function renderLivPicker(panel,p,L){
+  const all=projectDocs(p);
+  panel.innerHTML=modalTabsHtml(p)+`
+    <button class="btn sm" id="m-back" style="margin-bottom:14px">← ${esc(L.label)}</button>
+    <div class="modal-section-title">Épingler des documents à « ${esc(L.label)} »</div>
+    <p style="font-size:13px;color:var(--ink-3);margin-bottom:12px">Documents du projet. Cliquez pour épingler ou retirer — l'enregistrement est immédiat.</p>
+    <input id="lp-q" class="lp-q" placeholder="Filtrer par nom, sujet, catégorie…" value="${esc(livPickerQuery)}">
+    <div id="lp-list"></div>`;
+  const list=document.getElementById('lp-list');
+  const draw=()=>{
+    const q=livPickerQuery.trim().toLowerCase();
+    const shown=q?all.filter(d=>docHay(d).indexOf(q)>=0):all;
+    if(!all.length){
+      list.innerHTML='<div class="empty-note">Aucun document dans ce projet. Ajoutez-en un depuis l\'onglet Documents.</div>';
+      return;
+    }
+    if(!shown.length){
+      list.innerHTML=`<div class="empty-note">Aucun document ne correspond à « ${esc(livPickerQuery)} ».</div>`;
+      return;
+    }
+    const ids=livAttachedIds(p,L.key);
+    list.innerHTML=shown.map(d=>{
+      const on=ids.indexOf(d.id)>=0;
+      return projectDocRow(d,`<button type="button" class="btn sm ${on?'':'primary '}pdoc-pick" data-pick="${esc(d.id)}">${on?'Retirer':'+ Rattacher'}</button>`)
+        .replace('class="pdoc"',`class="pdoc${on?' sel':''}"`);
+    }).join('');
+    const toggle=id=>{
+      const cur=livAttachedIds(p,L.key).slice();
+      const i=cur.indexOf(id);
+      if(i>=0) cur.splice(i,1); else cur.push(id);
+      setLivAttached(p,L.key,cur);
+      draw();
+      toast(i>=0?'Document retiré du livrable':'Document épinglé au livrable');
+    };
+    list.querySelectorAll('.pdoc[data-pdocid]').forEach(el=>el.addEventListener('click',ev=>{
+      if(ev.target.closest('.pdoc-open')) return;   /* le lien Proton garde son rôle */
+      toggle(el.dataset.pdocid);
+    }));
+  };
+  draw();
+  const q=document.getElementById('lp-q');
+  q.addEventListener('input',()=>{ livPickerQuery=q.value; draw(); });
+  document.getElementById('m-back').addEventListener('click',()=>{ livPicker=false; livPickerQuery=''; renderModalMain(p); });
+  wireModalTabs(panel,p);
+}
+
+/* Livrables auxquels ce document a été rattaché à la main, dans ce projet. */
+function docLivrables(p,id){
+  return LIVRABLES.filter(L=>livAttachedIds(p,L.key).indexOf(id)>=0);
+}
+/* Rattacher au projet un document qui existe DÉJÀ : on écrit son projet_id,
+   on ne recrée rien. S'il appartenait à un autre projet, on demande confirmation
+   — c'est un déplacement, pas une copie (un document a un seul projet). */
+async function attacherDocAuProjet(p,d){
+  const nom=generateClientFileName({date:d.date,sujet:d.sujet,categorie:d.categorie,initiales:d.initiales,version:d.version})||d.sujet;
+  const anc=d.projetId?PROJECTS.find(x=>x.id===d.projetId):null;
+  if(anc&&anc.id!==p.id&&!confirm(`« ${nom} » est rattaché au projet « ${anc.title} ».\nLe déplacer vers « ${p.title} » ?`)) return;
+  const ok=await upsertCDocInSupabase(d.id, cdocToRow({...d, projetId:p.id}));
+  if(!ok) return;
+  await loadCDocsFromSupabase();
+  renderClientDocs();
+  renderModalMain(p);
+  toast('Document rattaché au projet');
+}
+/* Choix d'un document EXISTANT à rattacher au projet ouvert. */
+function renderDocsPicker(panel,p){
+  panel.innerHTML=modalTabsHtml(p)+`
+    <button class="btn sm" id="m-back" style="margin-bottom:14px">← Documents</button>
+    <div class="modal-section-title">Lier un document existant</div>
+    <p style="font-size:13px;color:var(--ink-3);margin-bottom:12px">Documents déjà créés qui ne sont pas dans ce projet. Cliquez pour les rattacher à « ${esc(p.title)} ».</p>
+    <input id="dp-q" class="lp-q" placeholder="Filtrer par nom, sujet, catégorie…" value="${esc(docsPickerQuery)}">
+    <div id="dp-list"></div>`;
+  const list=document.getElementById('dp-list');
+  const draw=()=>{
+    const q=docsPickerQuery.trim().toLowerCase();
+    const pool=DOCUMENTS_CLIENT.filter(d=>d.projetId!==p.id);
+    const shown=(q?pool.filter(d=>docHay(d).indexOf(q)>=0):pool)
+      .slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,60);
+    if(!shown.length){
+      list.innerHTML=`<div class="empty-note">${q?`Aucun document ne correspond à « ${esc(docsPickerQuery)} ».`:'Tous les documents sont déjà rattachés à ce projet.'}</div>`;
+      return;
+    }
+    list.innerHTML=shown.map(d=>{
+      const anc=d.projetId?PROJECTS.find(x=>x.id===d.projetId):null;
+      return projectDocRow(d,
+        `<button type="button" class="btn sm primary" data-attach="${esc(d.id)}">+ Rattacher</button>`,
+        anc?`<span class="pdoc-liv">${esc(anc.title)}</span>`:`<span class="pdoc-liv none">Sans projet</span>`);
+    }).join('')+(shown.length>=60?'<div class="empty-note">60 premiers résultats — affinez la recherche.</div>':'');
+    list.querySelectorAll('[data-attach]').forEach(b=>b.addEventListener('click',ev=>{
+      ev.stopPropagation();
+      const d=DOCUMENTS_CLIENT.find(x=>x.id===b.dataset.attach);
+      if(d) attacherDocAuProjet(p,d);
+    }));
+  };
+  draw();
+  const q=document.getElementById('dp-q');
+  q.addEventListener('input',()=>{ docsPickerQuery=q.value; draw(); });
+  document.getElementById('m-back').addEventListener('click',()=>{ docsPicker=false; docsPickerQuery=''; renderModalMain(p); });
+  wireModalTabs(panel,p);
+}
+function renderModalDocs(panel,p){
+  if(docsPicker) return renderDocsPicker(panel,p);
+  const list=projectDocs(p);
+  panel.innerHTML=modalTabsHtml(p)+`
+    <div class="modal-section-title">Documents du projet</div>
+    ${list.length
+      ? list.map(d=>projectDocRow(d,'',
+          docLivrables(p,d.id).map(L=>`<span class="pdoc-liv">${esc(L.label)}</span>`).join(''))).join('')
+      : '<div class="empty-note">Aucun document pour ce projet. Ajoutez-en un pour commencer.</div>'}
+    <div class="pdoc-foot">
+      <button type="button" class="btn sm" id="pdoc-link">Lier un document existant</button>
+      <button type="button" class="btn primary sm" id="pdoc-add">+ Nouveau document</button>
+    </div>`;
+  wireModalTabs(panel,p);
+  panel.querySelectorAll('.pdoc[data-pdocid]').forEach(el=>el.addEventListener('click',ev=>{
+    if(ev.target.closest('.pdoc-open')) return;
+    openClientDocModal(el.dataset.pdocid);
+  }));
+  const add=document.getElementById('pdoc-add');
+  if(add) add.addEventListener('click',()=>openClientDocModal(null,p.id));
+  const lnk=document.getElementById('pdoc-link');
+  if(lnk) lnk.addEventListener('click',()=>{ docsPicker=true; docsPickerQuery=''; renderModalMain(p); });
+}
+
 function renderModalMain(p){
   const panel=document.getElementById('panel-main');
   if(!panel) return;
@@ -1595,9 +1830,9 @@ function renderModalMain(p){
   if(modalQuery){
     let any=false, nameHtml='', linkHtml='';
     LIVRABLES.forEach(L=>{
-      if(mqHit(L.label)){ any=true; const n=livLinkCount(p,L.key); nameHtml+=foldRow(L.key,null,L.label,n+' doc'+(n>1?'s':''),LIV_SVG[L.key]); }
+      if(mqHit(L.label)){ any=true; nameHtml+=foldRow(L.key,null,L.label,livMeta(p,L.key),LIV_SVG[L.key]); }
       L.folders.forEach(fname=>{
-        if(mqHit(fname)||mqHit(L.label+' '+fname)){ any=true; const n=folderLinks(p,L.key,fname).length; nameHtml+=foldRow(L.key,fname,L.label+' · '+fname,n+' lien'+(n>1?'s':'')); }
+        if(mqHit(fname)||mqHit(L.label+' '+fname)){ any=true; nameHtml+=foldRow(L.key,fname,L.label+' · '+fname,folderMeta(p,L.key,fname)); }
         const links=folderLinks(p,L.key,fname).map((l,i)=>({l,i})).filter(({l})=>mqHit(linkHay(l,L.label+' '+fname)));
         if(links.length){ any=true; linkHtml+=`<div class="fold-search-head">${esc(L.label)} · ${esc(fname)}</div>`+links.map(({l,i})=>linkRow(L.key,fname,l,i)).join(''); }
       });
@@ -1607,16 +1842,25 @@ function renderModalMain(p){
     return;
   }
 
+  /* Onglet Documents */
+  if(modalTab==='docs'){ renderModalDocs(panel,p); return; }
+
   /* Détail d'un dossier (livrable + dossier) */
   if(currentLivrable && currentDocFolder){
     const L=LIVRABLES.find(x=>x.key===currentLivrable);
     if(!L||L.folders.indexOf(currentDocFolder)<0){ currentDocFolder=null; return renderModalMain(p); }
     const links=folderLinks(p,L.key,currentDocFolder);
-    panel.innerHTML=`
+    const docs=folderDocs(p,currentDocFolder);
+    const att=livAttachedIds(p,L.key);
+    panel.innerHTML=modalTabsHtml(p)+`
       <button class="btn sm" id="m-back" style="margin-bottom:14px">← ${esc(L.label)}</button>
       <div class="modal-section-title">${esc(L.label)} · ${esc(currentDocFolder)}</div>
-      <p style="font-size:13px;color:var(--ink-3);margin-bottom:14px">Liens Proton Drive de ce dossier.</p>
-      ${links.map((l,i)=>linkRow(L.key,currentDocFolder,l,i)).join('')||'<div class="empty-note">Aucun lien dans ce dossier.</div>'}
+      <p style="font-size:13px;color:var(--ink-3);margin-bottom:14px">Documents du projet en catégorie « ${esc(currentDocFolder)} ». Ils arrivent ici tout seuls : rien à ressaisir.</p>
+      ${docs.length
+        ? docs.map(d=>projectDocRow(d,'',att.indexOf(d.id)>=0?`<span class="pdoc-liv">${esc(L.label)}</span>`:'')).join('')
+        : `<div class="empty-note">Aucun document du projet en catégorie « ${esc(currentDocFolder)} ».</div>`}
+      <div class="modal-section-title" style="font-size:14px;margin-top:20px">Liens Proton ajoutés à la main</div>
+      ${links.map((l,i)=>linkRow(L.key,currentDocFolder,l,i)).join('')||'<div class="empty-note">Aucun lien saisi à la main dans ce dossier.</div>'}
       <div class="disc-compose" style="flex-wrap:wrap">
         <input id="fl-name" placeholder="Nom du fichier" style="flex:1 1 150px">
         <input id="fl-url" placeholder="https://drive.proton.me/…" style="flex:2 1 220px">
@@ -1626,7 +1870,12 @@ function renderModalMain(p){
         <button class="btn primary sm" id="fl-add">+ Ajouter le lien</button>
       </div>`;
     document.getElementById('m-back').addEventListener('click',()=>{ currentDocFolder=null; renderModalMain(p); });
+    wireModalTabs(panel,p);
     wireLinkRows(panel,p);
+    panel.querySelectorAll('.pdoc[data-pdocid]').forEach(el=>el.addEventListener('click',ev=>{
+      if(ev.target.closest('.pdoc-open')) return;
+      openClientDocModal(el.dataset.pdocid);
+    }));
     document.getElementById('fl-add').addEventListener('click',()=>{
       const name=panel.querySelector('#fl-name').value.trim();
       const url=panel.querySelector('#fl-url').value.trim();
@@ -1645,9 +1894,11 @@ function renderModalMain(p){
   if(currentLivrable){
     const L=LIVRABLES.find(x=>x.key===currentLivrable);
     if(!L){ currentLivrable=null; return renderModalMain(p); }
+    if(livPicker) return renderLivPicker(panel,p,L);
     p.livDates=p.livDates||{};
     const ld=p.livDates[L.key]||{};
-    panel.innerHTML=`
+    const att=livAttachedDocs(p,L.key);
+    panel.innerHTML=modalTabsHtml(p)+`
       <button class="btn sm" id="m-back" style="margin-bottom:14px">← Livrables</button>
       <div class="modal-section-title">${esc(L.label)}</div>
       <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;padding:10px 12px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-sm)">
@@ -1655,10 +1906,28 @@ function renderModalMain(p){
         <label class="md-field">Fin <input type="date" id="lv-end" value="${esc(ld.end||'')}"></label>
         <span style="font-size:11.5px;color:var(--ink-3);align-self:center">Dates spécifiques à ce livrable (utilisées sur le Calendrier).</span>
       </div>
-      <div class="modal-section-title" style="font-size:14px;margin-top:6px">Dossiers de documents</div>
-      ${L.folders.map(fname=>{ const n=folderLinks(p,L.key,fname).length; return foldRow(L.key,fname,fname,n+' lien'+(n>1?'s':'')); }).join('')}`;
+      <div class="modal-section-title" style="font-size:14px;margin-top:6px">Documents mis en avant</div>
+      <p style="font-size:12.5px;color:var(--ink-3);margin:-8px 0 12px">Les dossiers ci-dessous se remplissent tout seuls à partir des documents du projet. Cette liste sert à épingler ceux qui sont propres à ce livrable.</p>
+      ${att.length
+        ? att.map(d=>projectDocRow(d,`<button type="button" class="btn sm pdoc-unlink" data-unlink="${esc(d.id)}">Retirer</button>`)).join('')
+        : '<div class="empty-note">Aucun document épinglé à ce livrable.</div>'}
+      <div class="pdoc-foot"><button type="button" class="btn primary sm" id="lv-pick">+ Épingler un document</button></div>
+      <div class="modal-section-title" style="font-size:14px;margin-top:18px">Dossiers de documents</div>
+      ${L.folders.map(fname=>foldRow(L.key,fname,fname,folderMeta(p,L.key,fname))).join('')}`;
     document.getElementById('m-back').addEventListener('click',()=>{ currentLivrable=null; renderModalMain(p); });
+    wireModalTabs(panel,p);
     wireFoldRows(panel,p);
+    document.getElementById('lv-pick').addEventListener('click',()=>{ livPicker=true; livPickerQuery=''; renderModalMain(p); });
+    panel.querySelectorAll('[data-unlink]').forEach(b=>b.addEventListener('click',ev=>{
+      ev.stopPropagation();
+      const cur=livAttachedIds(p,L.key).filter(x=>x!==b.dataset.unlink);
+      setLivAttached(p,L.key,cur);
+      renderModalMain(p); toast('Document retiré du livrable');
+    }));
+    panel.querySelectorAll('.pdoc[data-pdocid]').forEach(el=>el.addEventListener('click',ev=>{
+      if(ev.target.closest('.pdoc-open')||ev.target.closest('[data-unlink]')) return;
+      openClientDocModal(el.dataset.pdocid);
+    }));
     const wireLv=(id,k)=>{
       const el=document.getElementById(id); if(!el) return;
       el.addEventListener('change',()=>{
@@ -1674,10 +1943,11 @@ function renderModalMain(p){
   }
 
   /* Liste des livrables du projet */
-  panel.innerHTML=`
+  panel.innerHTML=modalTabsHtml(p)+`
     <div class="modal-section-title">Livrables</div>
-    <p style="font-size:13px;color:var(--ink-3);margin-bottom:14px">Ouvre un livrable pour accéder à ses dossiers de documents (liens Proton Drive).</p>
-    ${LIVRABLES.map(L=>{ const n=livLinkCount(p,L.key); return foldRow(L.key,null,L.label,n+' doc'+(n>1?'s':''),LIV_SVG[L.key]); }).join('')}`;
+    <p style="font-size:13px;color:var(--ink-3);margin-bottom:14px">Ouvre un livrable pour ses dates et ses dossiers, qui reprennent automatiquement les documents du projet par catégorie.</p>
+    ${LIVRABLES.map(L=>foldRow(L.key,null,L.label,livMeta(p,L.key),LIV_SVG[L.key])).join('')}`;
+  wireModalTabs(panel,p);
   wireFoldRows(panel,p);
 }
 
@@ -2150,6 +2420,16 @@ let cdocCat='tous';
 let cdocWho='tous';
 let cdocProj='tous';
 let cdocYear='tous';
+/* Affichage de la page Documents. Liste par défaut : l'équipe a des centaines
+   de fiches et les cartes obligent à scroller. Le choix vit le temps de la
+   session, volontairement pas en localStorage. */
+let cdocView='liste';
+const CDOC_ICO={
+  images:'<path d="M3 5h18v14H3z"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5-4 4-2-2-7 6"/>',
+  video: '<path d="M4 5h11v14H4z"/><path d="M15 10l5-3v10l-5-3z"/>',
+  texte: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M9 13h7M9 17h5"/>',
+  audio: '<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/>'
+};
 
 function renderClientDocs(){
   /* Les filtres sont désormais dans le panneau du haut (ds-panel) :
@@ -2183,17 +2463,42 @@ function renderClientDocs(){
   }
   const grid=document.getElementById('cdoc-grid');
   if(!grid) return;
+  grid.className=cdocView==='liste'?'doc-list':'proj-grid';
+  document.getElementById('cdoc-view-grille')?.classList.toggle('active',cdocView==='grille');
+  document.getElementById('cdoc-view-liste')?.classList.toggle('active',cdocView==='liste');
   if(!list.length){
     grid.innerHTML=`<div class="placeholder" style="grid-column:1/-1">
       <div class="ph-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/></svg></div>
       <h2>Aucun document</h2><p>Aucun document ne correspond à ces filtres. Modifie tes critères dans le panneau de recherche en haut.</p></div>`;
     return;
   }
-  grid.innerHTML=list.map(renderClientDocCard).join('');
-  grid.querySelectorAll('.doc-card[data-cdocid]').forEach(c=>c.addEventListener('click',ev=>{
+  grid.innerHTML=list.map(cdocView==='liste'?renderClientDocRow:renderClientDocCard).join('');
+  grid.querySelectorAll('[data-cdocid]').forEach(c=>c.addEventListener('click',ev=>{
     if(ev.target.closest('.doc-proton-link')) return;
     openClientDocModal(c.dataset.cdocid);
   }));
+}
+
+function renderClientDocRow(d){
+  const cat=DOC_CATEGORIES_CLIENT.find(c=>c.key===d.categorie);
+  const author=TEAM.find(m=>m.initiales===d.initiales);
+  const name=generateClientFileName({date:d.date,sujet:d.sujet,categorie:d.categorie,initiales:d.initiales,version:d.version});
+  const url=docFolderLink(d);
+  const ok=isHttpUrl(url);
+  return `<div class="doc-row" data-cdocid="${esc(d.id)}" title="${esc(name||d.sujet||'')}">
+    <span class="dr-ic doc-cat-${esc(d.categorie)}" title="${esc(cat?cat.label:d.categorie)}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">${CDOC_ICO[d.categorie]||''}</svg>
+    </span>
+    <span class="dr-n">${esc(name||'(incomplet)')}</span>
+    <span class="dr-r">${esc(d.resume||'')}</span>
+    ${author
+      ? `<span class="ava-sm dr-a" style="background:${author.color}" title="${esc(author.name)}">${esc(author.initiales)}</span>`
+      : `<span class="ava-sm dr-a" style="background:var(--ink-3)" title="Responsable inconnu">${esc(d.initiales||'?')}</span>`}
+    <span class="dr-d">${esc(fmtDate(d.date))}</span>
+    ${ok
+      ? `<a class="dr-o doc-proton-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Ouvrir ↗</a>`
+      : `<span class="dr-o none">—</span>`}
+  </div>`;
 }
 
 function renderClientDocCard(d){
@@ -2221,11 +2526,13 @@ function renderClientDocCard(d){
   </article>`;
 }
 
-function openClientDocModal(id){
+/* presetProjetId : projet pré-sélectionné quand on crée le document depuis la
+   modale d'un projet (bouton « + Lier un document »). */
+function openClientDocModal(id, presetProjetId){
   const isEdit=!!id;
   const todayIso=fmtIso(new Date());
   const d=isEdit?DOCUMENTS_CLIENT.find(x=>x.id===id)
-                :{id:null,date:todayIso,sujet:'',projetId:'',categorie:'',initiales:'BL',version:1,lienProton:'',resume:''};
+                :{id:null,date:todayIso,sujet:'',projetId:presetProjetId||'',categorie:'',initiales:'BL',version:1,lienProton:'',resume:''};
   if(isEdit&&!d) return;
   document.getElementById('cdoc-m-title').textContent=isEdit?'Modifier le document':'Nouveau document';
   document.getElementById('cdoc-m-sub').textContent=isEdit?'Format client — modifier':'Format client — 5 étapes';
@@ -2384,6 +2691,7 @@ function openClientDocModal(id){
       await loadCDocsFromSupabase();
       closeClientDocModal();
       renderClientDocs();
+      refreshOpenProjectModal();
       toast('Document supprimé');
     });
   }
@@ -2395,6 +2703,15 @@ function openClientDocModal(id){
 
 function closeClientDocModal(){ document.getElementById('client-doc-overlay').classList.remove('open'); }
 
+/* La modale projet peut être ouverte derrière celle du document : on la
+   redessine pour que l'onglet Documents reflète l'ajout/suppression. */
+function refreshOpenProjectModal(){
+  const ovl=document.getElementById('overlay');
+  if(!ovl||!ovl.classList.contains('open')) return;
+  const p=PROJECTS.find(x=>x.id===currentId);
+  if(p) renderModalMain(p);
+}
+
 async function saveClientDocFromForm(id,s){
   if(!s.date||!s.sujet.trim()||!s.categorie||!s.initiales) return;
   const payload = cdocToRow(s);
@@ -2403,6 +2720,7 @@ async function saveClientDocFromForm(id,s){
   await loadCDocsFromSupabase();
   closeClientDocModal();
   renderClientDocs();
+  refreshOpenProjectModal();
   toast(id?'Document mis à jour':'Document ajouté');
 }
 
@@ -3042,6 +3360,10 @@ if(supa){
   if(cn) cn.addEventListener('click',()=>openClientDocModal(null));
   const cc=document.getElementById('cdoc-csv-btn');
   if(cc) cc.addEventListener('click',exportClientDocsCSV);
+  [['cdoc-view-grille','grille'],['cdoc-view-liste','liste']].forEach(([id,mode])=>{
+    const b=document.getElementById(id);
+    if(b) b.addEventListener('click',()=>{ if(cdocView===mode) return; cdocView=mode; renderClientDocs(); });
+  });
   const cb=document.getElementById('cdoc-m-close');
   if(cb) cb.addEventListener('click',closeClientDocModal);
   bindBackdropClose(document.getElementById('client-doc-overlay'), closeClientDocModal);

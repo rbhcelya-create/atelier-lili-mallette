@@ -551,6 +551,72 @@ h1.title{
 .tab-panel{display:none}
 .tab-panel.active{display:block;animation:fade .2s ease}
 
+/* Onglets de la modale projet (Livrables / Documents) */
+.mtabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:-6px 0 16px}
+.mtab{
+  display:flex;align-items:center;gap:6px;
+  border:none;background:none;cursor:pointer;
+  font-family:inherit;font-size:13px;font-weight:600;color:var(--ink-3);
+  padding:8px 12px;border-bottom:2px solid transparent;margin-bottom:-1px;
+}
+.mtab:hover{color:var(--ink-2)}
+.mtab.active{color:var(--ink);border-bottom-color:var(--accent)}
+.mtab-c{
+  font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;
+  background:var(--surface-2);color:var(--ink-3);
+}
+.mtab.active .mtab-c{background:var(--accent-soft);color:var(--accent-dark)}
+
+/* Ligne de document dans l'onglet Documents */
+.pdoc{
+  display:flex;align-items:center;gap:12px;
+  padding:11px 13px;margin-bottom:8px;cursor:pointer;
+  background:var(--surface-2);border:1px solid var(--line);
+  border-radius:var(--radius-sm);transition:border-color .15s,box-shadow .15s;
+}
+.pdoc:hover{border-color:var(--accent);box-shadow:var(--shadow-sm)}
+.pdoc-main{flex:1;min-width:0}
+.pdoc-n{
+  font-family:'Fraunces',serif;font-weight:600;font-size:14.5px;color:var(--ink);
+  line-height:1.3;word-break:break-word;
+}
+.pdoc-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
+.pdoc-meta .ava-sm{margin-left:0;width:22px;height:22px;font-size:9px}
+.pdoc-date{font-size:12px;color:var(--ink-3)}
+.pdoc-resume{
+  font-size:12.5px;color:var(--ink-2);margin-top:6px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.pdoc-open{flex-shrink:0;text-decoration:none}
+.pdoc-nolink{flex-shrink:0;font-size:12px;color:var(--ink-3);font-style:italic}
+.pdoc-foot{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:14px}
+/* Étiquette d'appartenance : livrable(s) rattachés, ou projet d'origine dans
+   l'écran de liaison. */
+.pdoc-liv{
+  font-size:10.5px;font-weight:700;letter-spacing:.02em;
+  padding:2px 7px;border-radius:8px;
+  background:var(--accent-soft);color:var(--accent-dark);
+}
+.pdoc-liv.none{background:var(--surface-2);color:var(--ink-3);font-weight:600}
+/* Ligne déjà rattachée dans l'écran de sélection */
+.pdoc.sel{border-color:var(--accent);background:var(--accent-soft)}
+.lp-q{
+  width:100%;margin-bottom:12px;padding:9px 12px;
+  font-family:inherit;font-size:13.5px;color:var(--ink);
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);
+}
+.lp-q:focus{outline:none;border-color:var(--accent)}
+/* En étroit, le bouton passe sous le nom : sinon le nom généré, souvent long,
+   se retrouve écrasé dans une colonne de ~120px. */
+@media (max-width:520px){
+  .pdoc{flex-direction:column;align-items:stretch;gap:9px}
+  .pdoc-open{text-align:center}
+}
+
+/* La modale « document » s'ouvre par-dessus celle du projet (même z-index,
+   mais elle est plus haut dans le DOM) — on la remonte explicitement. */
+#client-doc-overlay{z-index:210}
+
 .modal-search{
   display:flex;align-items:center;gap:9px;
   padding:10px 24px;border-bottom:1px solid var(--line);
@@ -1012,6 +1078,49 @@ h1.title{
 .badge.doc-cat-texte{background:#DCE3EC;color:var(--navy)}
 .badge.doc-cat-audio{background:var(--gold-soft);color:var(--gold)}
 .doc-card .pc-foot{font-size:11.5px}
+
+/* ===== Page Documents : bascule Grille / Liste ===== */
+.vtoggle{display:flex;border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden}
+.vt{
+  display:flex;align-items:center;justify-content:center;
+  width:34px;height:34px;padding:0;border:none;cursor:pointer;
+  background:var(--surface);color:var(--ink-3);
+}
+.vt+.vt{border-left:1px solid var(--line)}
+.vt:hover{color:var(--ink-2);background:var(--surface-2)}
+.vt.active{background:var(--accent-soft);color:var(--accent-dark)}
+.vt .ico{width:17px;height:17px}
+
+/* ===== Page Documents : vue liste ===== */
+/* Une ligne = une grille fixe, sinon les noms générés (très longs et de
+   longueurs très inégales) décaleraient les colonnes d'une ligne à l'autre. */
+.doc-list{border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}
+.doc-row{
+  display:grid;align-items:center;gap:12px;
+  grid-template-columns:26px minmax(0,2.4fr) minmax(0,1.6fr) 24px 78px 66px;
+  height:44px;padding:0 14px;cursor:pointer;
+  border-bottom:1px solid var(--line);
+}
+.doc-row:last-child{border-bottom:none}
+.doc-row:hover{background:var(--surface-2)}
+.dr-ic{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px}
+.dr-ic svg{width:15px;height:15px;stroke-width:1.8}
+.dr-ic.doc-cat-images{background:var(--sage-soft);color:var(--sage)}
+.dr-ic.doc-cat-video{background:var(--accent-soft);color:var(--accent-dark)}
+.dr-ic.doc-cat-texte{background:#DCE3EC;color:var(--navy)}
+.dr-ic.doc-cat-audio{background:var(--gold-soft);color:var(--gold)}
+.dr-n,.dr-r{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.dr-n{font-family:'Fraunces',serif;font-weight:600;font-size:13.5px;color:var(--ink)}
+.dr-r{font-size:12.5px;color:var(--ink-2)}
+.dr-a{margin-left:0;width:24px;height:24px;font-size:9px;flex-shrink:0}
+.dr-d{font-size:12px;color:var(--ink-3);white-space:nowrap}
+.dr-o{font-size:12px;text-align:right;white-space:nowrap}
+.dr-o.none{color:var(--ink-3)}
+/* En étroit, le résumé et la date cèdent la place : le nom reste lisible. */
+@media (max-width:900px){
+  .doc-row{grid-template-columns:26px minmax(0,1fr) 24px 66px}
+  .dr-r,.dr-d{display:none}
+}
 .doc-proton-link{color:var(--accent-dark);text-decoration:none;border-bottom:1px solid var(--accent-soft);font-weight:600}
 .doc-proton-link:hover{border-color:var(--accent)}
 
