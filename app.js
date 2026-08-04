@@ -563,6 +563,28 @@ function setProjectFolderLink(projetId, categorie, url){
   saveState();
   return true;
 }
+/* Livrables retenus pour un projet. Clé réservée dans p.livDates (colonne
+   `liv_dates`, déjà persistée) : jamais le nom d'un livrable, donc pas de
+   collision avec les dates. Projet qui n'a jamais choisi = les cinq, comme
+   avant. Décocher ne supprime rien : dates, liens et épinglages restent en
+   base et reviennent si on recoche. */
+const LIV_ACTIFS_KEY='__actifs';
+function livrablesActifs(p){
+  const a=p.livDates&&p.livDates[LIV_ACTIFS_KEY];
+  return Array.isArray(a)?LIVRABLES.filter(L=>a.indexOf(L.key)>=0):LIVRABLES;
+}
+function setLivrableActif(p,lk,on){
+  p.livDates=p.livDates||{};
+  const cur=Array.isArray(p.livDates[LIV_ACTIFS_KEY])
+    ? p.livDates[LIV_ACTIFS_KEY].slice()
+    : LIVRABLES.map(L=>L.key);
+  const i=cur.indexOf(lk);
+  if(on&&i<0) cur.push(lk);
+  else if(!on&&i>=0) cur.splice(i,1);
+  p.livDates[LIV_ACTIFS_KEY]=cur;
+  saveState();
+}
+
 /* Clé réservée dans p.docs[livrable] : identifiants des documents de
    DOCUMENTS_CLIENT rattachés À LA MAIN à ce livrable. Elle vit dans la colonne
    `docs` (déjà persistée en BD et en localStorage) — aucune migration. Les
@@ -1003,8 +1025,8 @@ function renderGantt(){
         ${todIn?`<div class="g-today" style="left:${todPct}%"></div>`:''}
       </div>
     </div>`;
-    /* 4 sous-rangées : une barre par livrable (Balado, Vidéo, Spectacle, Fiche) */
-    LIVRABLES.forEach(L=>{
+    /* Une sous-rangée par livrable RETENU pour ce projet */
+    livrablesActifs(p).forEach(L=>{
       const ld=p.livDates[L.key]||{};
       const startIso=ld.start||p.dateStart||fmtIso(legacyFracToDate(p.gStart));
       const endIso=ld.end||p.dateEnd||fmtIso(legacyFracToDate(p.gEnd));
@@ -1293,6 +1315,9 @@ let currentLivrable=null;
 let currentDocFolder=null;
 let livPicker=false;      /* écran de sélection « rattacher des documents » */
 let livPickerQuery='';
+let livMenuOuvert=false;  /* menu déroulant de l'onglet Livrables */
+let livMenuReglage=false; /* son volet « choisir les livrables du projet » */
+let livMenuCloser=null;
 let docsPicker=false;     /* écran « lier un document existant » (onglet Documents) */
 let docsPickerQuery='';
 let modalTab='livr';   /* onglet de la modale projet : 'livr' | 'docs' */
@@ -1557,12 +1582,11 @@ function openProject(id, source, initLiv){
   }
 
   /* recherche locale + panneaux */
-  /* Onglet d'accueil = Documents : les dossiers de liens des livrables sont
-     quasi tous vides (4 remplis sur 500), on ouvrait donc sur un écran vide.
-     Exception : arrivée depuis le Calendrier sur un livrable précis. */
+  /* Onglet d'accueil = Livrables : ses dossiers ne sont plus vides depuis qu'ils
+     se déduisent des documents du projet. */
   modalQuery=''; currentLivrable=initLiv||null; currentDocFolder=null;
-  livPicker=false; livPickerQuery=''; docsPicker=false; docsPickerQuery='';
-  modalTab=initLiv?'livr':'docs';
+  livPicker=false; livPickerQuery=''; docsPicker=false; docsPickerQuery=''; livMenuOuvert=false; livMenuReglage=false;
+  modalTab='livr';
   const ms=document.getElementById('m-search');
   if(ms){ ms.value=''; ms.parentElement.classList.remove('has-q'); }
   renderModalPanels(p);
@@ -1676,6 +1700,18 @@ function folderDocs(p,fname){
   const c=FOLDER_CAT[fname];
   return c?projectDocs(p).filter(d=>d.categorie===c):[];
 }
+/* Contenu d'un dossier POUR UN LIVRABLE donné. Le dossier montre ce qu'on lui a
+   épinglé ; tant que personne n'a rien épinglé dans cette catégorie, il montre
+   tout ce que le projet a de cette catégorie, marqué « à répartir » — sinon un
+   document créé aujourd'hui n'apparaîtrait nulle part. La bascule est PAR
+   DOSSIER : épingler une image ne vide pas le dossier Texte. */
+function folderDocsLiv(p,lk,fname){
+  const c=FOLDER_CAT[fname];
+  if(!c) return {docs:[],repartir:false};
+  const att=livAttachedDocs(p,lk).filter(d=>d.categorie===c);
+  if(att.length) return {docs:att,repartir:false};
+  return {docs:projectDocs(p).filter(d=>d.categorie===c),repartir:true};
+}
 function nDoc(n){ return n+' document'+(n>1?'s':''); }
 function nLien(n){ return n+' lien'+(n>1?'s':''); }
 /* Tant qu'un projet porte les cinq livrables, ses documents se retrouvent dans
@@ -1686,8 +1722,10 @@ function livMeta(p,lk){
   return nDoc(nd)+' du projet'+(nl?' · '+nLien(nl):'');
 }
 function folderMeta(p,lk,fname){
-  const nl=folderLinks(p,lk,fname).length, nd=folderDocs(p,fname).length;
-  return nl?nDoc(nd)+' · '+nLien(nl):nDoc(nd);
+  const nl=folderLinks(p,lk,fname).length;
+  const {docs,repartir}=folderDocsLiv(p,lk,fname);
+  const base=nDoc(docs.length)+(repartir&&docs.length?' à répartir':'');
+  return nl?base+' · '+nLien(nl):base;
 }
 function docHay(d){
   const cat=DOC_CATEGORIES_CLIENT.find(c=>c.key===d.categorie);
@@ -1745,7 +1783,7 @@ function renderLivPicker(panel,p,L){
 
 /* Livrables auxquels ce document a été rattaché à la main, dans ce projet. */
 function docLivrables(p,id){
-  return LIVRABLES.filter(L=>livAttachedIds(p,L.key).indexOf(id)>=0);
+  return livrablesActifs(p).filter(L=>livAttachedIds(p,L.key).indexOf(id)>=0);
 }
 /* Rattacher au projet un document qui existe DÉJÀ : on écrit son projet_id,
    on ne recrée rien. S'il appartenait à un autre projet, on demande confirmation
@@ -1829,7 +1867,7 @@ function renderModalMain(p){
   /* Recherche : livrables, dossiers et documents correspondants */
   if(modalQuery){
     let any=false, nameHtml='', linkHtml='';
-    LIVRABLES.forEach(L=>{
+    livrablesActifs(p).forEach(L=>{
       if(mqHit(L.label)){ any=true; nameHtml+=foldRow(L.key,null,L.label,livMeta(p,L.key),LIV_SVG[L.key]); }
       L.folders.forEach(fname=>{
         if(mqHit(fname)||mqHit(L.label+' '+fname)){ any=true; nameHtml+=foldRow(L.key,fname,L.label+' · '+fname,folderMeta(p,L.key,fname)); }
@@ -1850,14 +1888,19 @@ function renderModalMain(p){
     const L=LIVRABLES.find(x=>x.key===currentLivrable);
     if(!L||L.folders.indexOf(currentDocFolder)<0){ currentDocFolder=null; return renderModalMain(p); }
     const links=folderLinks(p,L.key,currentDocFolder);
-    const docs=folderDocs(p,currentDocFolder);
-    const att=livAttachedIds(p,L.key);
+    const {docs,repartir}=folderDocsLiv(p,L.key,currentDocFolder);
     panel.innerHTML=modalTabsHtml(p)+`
       <button class="btn sm" id="m-back" style="margin-bottom:14px">← ${esc(L.label)}</button>
       <div class="modal-section-title">${esc(L.label)} · ${esc(currentDocFolder)}</div>
-      <p style="font-size:13px;color:var(--ink-3);margin-bottom:14px">Documents du projet en catégorie « ${esc(currentDocFolder)} ». Ils arrivent ici tout seuls : rien à ressaisir.</p>
+      <p style="font-size:13px;color:var(--ink-3);margin-bottom:14px">${repartir
+        ? `Personne n'a encore dit quels documents « ${esc(currentDocFolder)} » relèvent de ce livrable : le projet en montre tout ce qu'il a. Épingle-les pour que ce dossier lui soit propre.`
+        : `Documents « ${esc(currentDocFolder)} » épinglés à ce livrable.`}</p>
       ${docs.length
-        ? docs.map(d=>projectDocRow(d,'',att.indexOf(d.id)>=0?`<span class="pdoc-liv">${esc(L.label)}</span>`:'')).join('')
+        ? docs.map(d=>projectDocRow(d,
+            repartir
+              ? `<button type="button" class="btn sm" data-pinlink="${esc(d.id)}">Épingler ici</button>`
+              : `<button type="button" class="btn sm pdoc-unlink" data-unlink="${esc(d.id)}">Retirer</button>`,
+            repartir?'<span class="pdoc-liv pdoc-liv-warn">à répartir</span>':`<span class="pdoc-liv">${esc(L.label)}</span>`)).join('')
         : `<div class="empty-note">Aucun document du projet en catégorie « ${esc(currentDocFolder)} ».</div>`}
       <div class="modal-section-title" style="font-size:14px;margin-top:20px">Liens Proton ajoutés à la main</div>
       ${links.map((l,i)=>linkRow(L.key,currentDocFolder,l,i)).join('')||'<div class="empty-note">Aucun lien saisi à la main dans ce dossier.</div>'}
@@ -1872,8 +1915,18 @@ function renderModalMain(p){
     document.getElementById('m-back').addEventListener('click',()=>{ currentDocFolder=null; renderModalMain(p); });
     wireModalTabs(panel,p);
     wireLinkRows(panel,p);
+    panel.querySelectorAll('[data-pinlink]').forEach(b=>b.addEventListener('click',ev=>{
+      ev.stopPropagation();
+      setLivAttached(p,L.key,livAttachedIds(p,L.key).concat([b.dataset.pinlink]));
+      renderModalMain(p); toast('Document épinglé à '+L.label);
+    }));
+    panel.querySelectorAll('[data-unlink]').forEach(b=>b.addEventListener('click',ev=>{
+      ev.stopPropagation();
+      setLivAttached(p,L.key,livAttachedIds(p,L.key).filter(x=>x!==b.dataset.unlink));
+      renderModalMain(p); toast('Document retiré du livrable');
+    }));
     panel.querySelectorAll('.pdoc[data-pdocid]').forEach(el=>el.addEventListener('click',ev=>{
-      if(ev.target.closest('.pdoc-open')) return;
+      if(ev.target.closest('.pdoc-open')||ev.target.closest('[data-pinlink]')||ev.target.closest('[data-unlink]')) return;
       openClientDocModal(el.dataset.pdocid);
     }));
     document.getElementById('fl-add').addEventListener('click',()=>{
@@ -1890,7 +1943,10 @@ function renderModalMain(p){
     return;
   }
 
-  /* Détail d'un livrable : période + ses dossiers */
+  /* Un livrable à la fois : celui choisi dans le menu déroulant */
+  const actifs=livrablesActifs(p);
+  if(!actifs.length) currentLivrable=null;
+  else if(!currentLivrable || !actifs.some(L=>L.key===currentLivrable)) currentLivrable=actifs[0].key;
   if(currentLivrable){
     const L=LIVRABLES.find(x=>x.key===currentLivrable);
     if(!L){ currentLivrable=null; return renderModalMain(p); }
@@ -1898,9 +1954,13 @@ function renderModalMain(p){
     p.livDates=p.livDates||{};
     const ld=p.livDates[L.key]||{};
     const att=livAttachedDocs(p,L.key);
-    panel.innerHTML=modalTabsHtml(p)+`
-      <button class="btn sm" id="m-back" style="margin-bottom:14px">← Livrables</button>
-      <div class="modal-section-title">${esc(L.label)}</div>
+    /* Sans aucun épinglage, les quatre dossiers retombent sur les documents du
+       projet : ils sont alors IDENTIQUES d'un livrable à l'autre, et changer de
+       livrable a l'air de ne rien faire. On le dit plutôt que de le laisser
+       deviner. */
+    const etats=L.folders.map(f=>folderDocsLiv(p,L.key,f));
+    const toutARepartir=etats.every(e=>e.repartir) && etats.some(e=>e.docs.length);
+    panel.innerHTML=modalTabsHtml(p)+livHeadHtml(p,actifs)+`
       <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;padding:10px 12px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-sm)">
         <label class="md-field">Début <input type="date" id="lv-start" value="${esc(ld.start||'')}"></label>
         <label class="md-field">Fin <input type="date" id="lv-end" value="${esc(ld.end||'')}"></label>
@@ -1913,9 +1973,10 @@ function renderModalMain(p){
         : '<div class="empty-note">Aucun document épinglé à ce livrable.</div>'}
       <div class="pdoc-foot"><button type="button" class="btn primary sm" id="lv-pick">+ Épingler un document</button></div>
       <div class="modal-section-title" style="font-size:14px;margin-top:18px">Dossiers de documents</div>
+      ${toutARepartir?`<p class="liv-note-repartir">Rien n'est encore épinglé à « ${esc(L.label)} » : ces dossiers montrent tous les documents du projet, donc ils sont les mêmes sous chaque livrable. Ouvre un dossier et épingle ce qui relève de ce livrable — c'est ce qui les fera différer.</p>`:''}
       ${L.folders.map(fname=>foldRow(L.key,fname,fname,folderMeta(p,L.key,fname))).join('')}`;
-    document.getElementById('m-back').addEventListener('click',()=>{ currentLivrable=null; renderModalMain(p); });
     wireModalTabs(panel,p);
+    wireLivHead(panel,p);
     wireFoldRows(panel,p);
     document.getElementById('lv-pick').addEventListener('click',()=>{ livPicker=true; livPickerQuery=''; renderModalMain(p); });
     panel.querySelectorAll('[data-unlink]').forEach(b=>b.addEventListener('click',ev=>{
@@ -1942,13 +2003,71 @@ function renderModalMain(p){
     return;
   }
 
-  /* Liste des livrables du projet */
-  panel.innerHTML=modalTabsHtml(p)+`
-    <div class="modal-section-title">Livrables</div>
-    <p style="font-size:13px;color:var(--ink-3);margin-bottom:14px">Ouvre un livrable pour ses dates et ses dossiers, qui reprennent automatiquement les documents du projet par catégorie.</p>
-    ${LIVRABLES.map(L=>foldRow(L.key,null,L.label,livMeta(p,L.key),LIV_SVG[L.key])).join('')}`;
+  /* Aucun livrable retenu : il reste le menu pour en recocher un. */
+  panel.innerHTML=modalTabsHtml(p)+livHeadHtml(p,actifs)
+    +'<div class="empty-note">Aucun livrable retenu pour ce projet. Ouvre le menu ci-dessus, puis « Choisir les livrables du projet… ».</div>';
   wireModalTabs(panel,p);
-  wireFoldRows(panel,p);
+  wireLivHead(panel,p);
+}
+
+/* Barre de l'onglet Livrables : UN seul menu. Il sert d'abord le geste courant
+   — choisir le livrable qu'on regarde — et range dessous, derrière une entrée
+   dédiée, le réglage rare : quels livrables ce projet produit. */
+function livHeadHtml(p,actifs){
+  const cles=actifs.map(L=>L.key);
+  const cour=actifs.find(L=>L.key===currentLivrable);
+  return `<div class="liv-head">
+    <span class="liv-choix-l">Livrable</span>
+    <div class="liv-menu${livMenuOuvert?' open':''}">
+      <button type="button" class="btn sm liv-menu-btn" id="liv-menu-btn" aria-haspopup="true" aria-expanded="${livMenuOuvert?'true':'false'}">
+        <span>${cour?esc(cour.label):'Aucun livrable retenu'}</span>
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="liv-menu-pop" role="menu">
+        ${actifs.map(L=>`<button type="button" class="liv-menu-item liv-go${L.key===currentLivrable?' active':''}" data-livgo="${esc(L.key)}">${esc(L.label)}</button>`).join('')}
+        <button type="button" class="liv-menu-item liv-reglage" id="liv-reglage">Choisir les livrables du projet…</button>
+        ${livMenuReglage?`
+          <div class="liv-menu-note">Décocher ne supprime rien : dates, liens et documents épinglés reviennent si tu recoches.</div>
+          ${LIVRABLES.map(L=>`<label class="liv-menu-item"><input type="checkbox" data-livtoggle="${esc(L.key)}"${cles.indexOf(L.key)>=0?' checked':''}><span>${esc(L.label)}</span></label>`).join('')}`:''}
+      </div>
+    </div>
+  </div>`;
+}
+function wireLivHead(panel,p){
+  panel.querySelectorAll('[data-livgo]').forEach(b=>b.addEventListener('click',ev=>{
+    ev.stopPropagation();
+    currentLivrable=b.dataset.livgo; currentDocFolder=null;
+    livMenuOuvert=false; livMenuReglage=false;
+    renderModalMain(p);
+  }));
+  panel.querySelector('#liv-reglage')?.addEventListener('click',ev=>{
+    ev.stopPropagation();
+    livMenuReglage=!livMenuReglage;
+    renderModalMain(p);
+  });
+  panel.querySelector('#liv-menu-btn')?.addEventListener('click',ev=>{
+    ev.stopPropagation();
+    livMenuOuvert=!livMenuOuvert;
+    if(!livMenuOuvert) livMenuReglage=false;
+    renderModalMain(p);
+  });
+  /* Fermeture au clic à côté. La barre est redessinée à chaque coche : sans le
+     retrait explicite, un écouteur s'empilerait par rendu. */
+  if(livMenuCloser) document.removeEventListener('click',livMenuCloser);
+  livMenuCloser=null;
+  if(livMenuOuvert){
+    livMenuCloser=ev=>{
+      if(ev.target.closest('.liv-menu')) return;
+      livMenuOuvert=false; livMenuReglage=false;
+      renderModalMain(p);
+    };
+    document.addEventListener('click',livMenuCloser);
+  }
+  panel.querySelectorAll('[data-livtoggle]').forEach(b=>b.addEventListener('change',()=>{
+    setLivrableActif(p,b.dataset.livtoggle,b.checked);
+    renderModalMain(p);
+    renderGantt(); renderDashboard(); renderProjets();
+  }));
 }
 
 /* ===== COMMENTAIRES (permanent) ===== */
