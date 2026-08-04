@@ -126,6 +126,12 @@ const initials = n => n.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperC
    d'équipe automatiquement et on supprimera le sélecteur manuel. */
 const LS_CURRENT_USER = 'lili-mallette-current-user-v1';
 let currentUserId = 'bruno';
+/* Restaure le profil mémorisé sur ce navigateur.
+   À l'amorçage, TEAM ne contient encore que l'équipe codée en dur : un membre
+   ARRIVÉ PAR INVITATION (id « inv_… ») n'y figure pas, sa ligne ne vient qu'avec
+   loadTeamFromSupabase. Sans second appel une fois l'équipe chargée, la
+   personne invitée revenait silencieusement sous le profil par défaut à chaque
+   rechargement — et ne voyait donc jamais ce qui lui était adressé. */
 function loadCurrentUser(){
   try{
     const stored = localStorage.getItem(LS_CURRENT_USER);
@@ -1075,6 +1081,7 @@ function renderSidebarFoot(){
   }
   if(name) name.textContent = u.name;
   if(role) role.textContent = u.role + ' · ' + (u.access === 'admin' ? 'Admin' : 'Éditeur');
+  renderSidebarBadge();
 }
 function showUserPicker(){
   const existing = document.getElementById('user-picker');
@@ -2070,6 +2077,145 @@ function wireLivHead(panel,p){
   }));
 }
 
+/* ===== COMMENTAIRES ADRESSÉS — notifications =====
+   Un commentaire « adressé à » quelqu'un doit lui arriver, pas l'attendre au
+   fond d'un projet qu'il n'ouvrira peut-être pas. Trois pièces :
+   l'accusé de lecture VIT DANS LE COMMENTAIRE (tableau `lu`), pour suivre la
+   personne d'un ordinateur à l'autre sans migration — `comments` est déjà une
+   colonne jsonb ; la pastille compte ce qui n'est pas encore acquitté ; le
+   panneau les liste et ouvre le projet concerné.
+
+   Les commentaires ANTÉRIEURS à ce chantier n'ont pas d'horodatage (`at`) :
+   ils sont tenus pour lus. Sans cette borne, six vieux commentaires de test
+   se seraient rallumés en pastille rouge le jour de la mise en ligne. */
+function estAdresse(c,uid){
+  /* On ne se notifie pas soi-même : s'adresser un pense-bête est courant. */
+  return !!c && c.to===uid && c.who!==uid;
+}
+function commentaireNonLu(c,uid){
+  return estAdresse(c,uid) && !!c.at && (c.lu||[]).indexOf(uid)<0;
+}
+/* Tous les commentaires en attente pour une personne, du plus récent au plus
+   ancien, avec leur projet et leur rang (le rang sert d'adresse : un
+   commentaire d'avant ce chantier n'a pas d'identifiant). */
+function notificationsPour(uid){
+  const out=[];
+  PROJECTS.forEach(p=>(p.comments||[]).forEach((c,i)=>{
+    if(commentaireNonLu(c,uid)) out.push({p:p,c:c,i:i});
+  }));
+  return out.sort((a,b)=>String(b.c.at).localeCompare(String(a.c.at)));
+}
+function marquerLu(p,i,uid){
+  const c=(p.comments||[])[i];
+  if(!c) return;
+  c.lu=Array.isArray(c.lu)?c.lu:[];
+  if(c.lu.indexOf(uid)<0) c.lu.push(uid);
+  saveState();
+  renderSidebarBadge();
+}
+/* Date d'un commentaire : les nouveaux portent un vrai horodatage, les anciens
+   n'ont qu'un texte figé (« à l'instant », qui ne l'a jamais été). */
+function dateCommentaire(c){
+  if(!c.at) return c.date||'';
+  const d=new Date(c.at);
+  if(isNaN(d)) return c.date||'';
+  const j=Math.floor((Date.now()-d.getTime())/86400000);
+  if(j<=0) return 'aujourd\'hui, '+d.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
+  if(j===1) return 'hier, '+d.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
+  return d.toLocaleDateString('fr-CA',{day:'numeric',month:'long'});
+}
+/* La cloche reste TOUJOURS visible : c'est l'endroit où l'on va voir ce qui
+   nous est adressé, même quand il n'y a rien. Seul le compteur rouge apparaît
+   et disparaît. */
+function renderSidebarBadge(){
+  const b=document.getElementById('sb-bell');
+  if(!b) return;
+  const n=notificationsPour(currentUserId).length;
+  const c=b.querySelector('.sb-bell-n');
+  if(c){ c.hidden=!n; c.textContent=n>9?'9+':String(n); }
+  b.classList.toggle('has-n',!!n);
+  b.title=n===0?'Aucun commentaire en attente'
+    :(n===1?'1 commentaire t\'est adressé':n+' commentaires te sont adressés');
+}
+let notifCloser=null;
+function showNotifPanel(){
+  const old=document.getElementById('notif-panel');
+  if(old){ fermerNotifPanel(); return; }
+  const uid=currentUserId;
+  const list=notificationsPour(uid);
+  const el=document.createElement('div');
+  el.id='notif-panel'; el.className='notif-panel';
+  el.innerHTML=`
+    <div class="notif-head">Pour moi<span class="notif-n">${list.length}</span></div>
+    <div class="notif-body">${list.length?list.map((n,k)=>{
+      const m=memberById(n.c.who);
+      return `<div class="notif-item" data-k="${k}">
+        <div class="notif-ava" style="background:${m?m.color:'#999'}">${esc(m?initials(m.name):'?')}</div>
+        <div class="notif-main">
+          <div class="notif-meta"><span class="notif-who">${esc(m?m.name:n.c.who)}</span><span class="notif-date">${esc(dateCommentaire(n.c))}</span></div>
+          <div class="notif-proj">${esc(n.p.title)}</div>
+          <div class="notif-txt">${esc(n.c.text)}</div>
+          <div class="notif-act">
+            <button type="button" class="btn sm" data-notif-open="${k}">Ouvrir le projet</button>
+            <button type="button" class="btn sm primary" data-notif-lu="${k}">J'ai lu</button>
+          </div>
+        </div>
+      </div>`;
+    }).join(''):'<div class="empty-note">Aucun commentaire en attente. Ceux qui te sont adressés apparaîtront ici.</div>'}</div>`;
+  document.body.appendChild(el);
+  const foot=document.querySelector('.sb-foot');
+  if(foot){
+    const r=foot.getBoundingClientRect();
+    el.style.left=(r.right+10)+'px';
+    el.style.bottom=Math.max(12,window.innerHeight-r.bottom)+'px';
+  }
+  el.querySelectorAll('[data-notif-lu]').forEach(b=>b.addEventListener('click',ev=>{
+    ev.stopPropagation();
+    const n=list[+b.dataset.notifLu];
+    marquerLu(n.p,n.i,uid);
+    fermerNotifPanel(); showNotifPanel();
+    toast('Commentaire marqué comme lu');
+  }));
+  el.querySelectorAll('[data-notif-open]').forEach(b=>b.addEventListener('click',ev=>{
+    ev.stopPropagation();
+    const n=list[+b.dataset.notifOpen];
+    fermerNotifPanel();
+    openProject(n.p.id);
+  }));
+  /* Fermeture au clic à côté — écouteur retiré à la fermeture, jamais empilé. */
+  notifCloser=ev=>{
+    if(ev.target.closest('#notif-panel')||ev.target.closest('#sb-bell')) return;
+    fermerNotifPanel();
+  };
+  setTimeout(()=>document.addEventListener('click',notifCloser),0);
+}
+function fermerNotifPanel(){
+  const el=document.getElementById('notif-panel');
+  if(el) el.remove();
+  if(notifCloser){ document.removeEventListener('click',notifCloser); notifCloser=null; }
+}
+
+/* Courriel : envoyé par une fonction Netlify, JAMAIS par le navigateur — la
+   clé du service d'envoi est un secret et n'a rien à faire dans du code
+   public. Tant que la fonction n'est pas déployée (ou sans clé), l'appel
+   échoue en silence : la pastille dans l'app reste le canal fiable, le
+   courriel n'est qu'un rappel. On n'attend pas la réponse. */
+function notifierParCourriel(p,c,destinataire){
+  if(!destinataire||!destinataire.email) return;
+  const auteur=memberById(c.who);
+  try{
+    fetch('/.netlify/functions/notifier-commentaire',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        destinataireNom:destinataire.name, destinataireCourriel:destinataire.email,
+        auteurNom:auteur?auteur.name:c.who,
+        projetTitre:p.title, projetId:p.id, texte:c.text
+      })
+    }).catch(()=>{});
+  }catch(e){}
+}
+
 /* ===== COMMENTAIRES (permanent) ===== */
 function renderCommentsSection(p){
   const box=document.getElementById('panel-comments');
@@ -2078,14 +2224,17 @@ function renderCommentsSection(p){
   const opts=TEAM.map(m=>`<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
   box.innerHTML=`
     <div class="modal-section-title">Commentaires</div>
-    ${p.comments.map(c=>{
+    ${p.comments.map((c,i)=>{
       const m=memberById(c.who);
       const to=c.to?memberById(c.to):null;
-      return `<div class="msg">
+      const pourMoi=estAdresse(c,currentUserId);
+      const nonLu=commentaireNonLu(c,currentUserId);
+      return `<div class="msg${pourMoi?' msg-pourmoi':''}">
         <div class="msg-ava" style="background:${m.color}">${initials(m.name)}</div>
         <div class="msg-bubble">
-          <div class="msg-meta"><span class="mm-name">${esc(m.name)}</span>${to?`<span class="mm-to">→ ${esc(to.name)}</span>`:''}<span class="mm-date">${esc(c.date)}</span></div>
+          <div class="msg-meta"><span class="mm-name">${esc(m.name)}</span>${to?`<span class="mm-to">→ ${esc(to.name)}</span>`:''}<span class="mm-date">${esc(dateCommentaire(c))}</span></div>
           <div class="msg-text">${esc(c.text)}</div>
+          ${nonLu?`<div class="msg-lu"><span class="msg-lu-t">Ce commentaire t'est adressé.</span><button type="button" class="btn sm primary" data-cmtlu="${i}">J'ai lu</button></div>`:''}
         </div>
       </div>`;
     }).join('')||'<div class="empty-note">Aucun commentaire pour l\'instant.</div>'}
@@ -2098,6 +2247,11 @@ function renderCommentsSection(p){
     </div>`;
   const send=document.getElementById('cmt-send');
   if(send) send.addEventListener('click',addMessage);
+  box.querySelectorAll('[data-cmtlu]').forEach(b=>b.addEventListener('click',()=>{
+    marquerLu(p,+b.dataset.cmtlu,currentUserId);
+    renderCommentsSection(p);
+    toast('Commentaire marqué comme lu');
+  }));
 }
 function addMessage(){
   const p=PROJECTS.find(x=>x.id===currentId);
@@ -2108,11 +2262,25 @@ function addMessage(){
   const sel=document.getElementById('cmt-to');
   const to=(sel&&sel.value)||'';
   p.comments=p.comments||[];
-  p.comments.push({ who:currentUserId, to:to||undefined, date:'à l\'instant', text:txt });
+  /* `at` = horodatage réel. `date` reste écrit pour les versions plus
+     anciennes de l'app qui liraient la même base et n'afficheraient sinon
+     rien du tout. `lu` démarre vide : personne n'a encore acquitté. */
+  const now=new Date();
+  p.comments.push({
+    id:'c_'+now.getTime()+'_'+Math.random().toString(36).slice(2,7),
+    who:currentUserId, to:to||undefined,
+    at:now.toISOString(), date:now.toLocaleDateString('fr-CA',{day:'numeric',month:'long'}),
+    text:txt, lu:[]
+  });
   saveState();
   renderCommentsSection(p);
   renderDashboard(); renderProjets();
-  toast('Commentaire ajouté');
+  renderSidebarBadge();
+  if(to && to!==currentUserId){
+    const m=memberById(to);
+    notifierParCourriel(p,p.comments[p.comments.length-1],m);
+    toast('Commentaire adressé à '+(m?m.name.split(' ')[0]:'')+' — il le verra dans sa pastille');
+  } else toast('Commentaire ajouté');
 }
 
 (function(){
@@ -3418,6 +3586,9 @@ renderSidebarFoot();
     /* Ignore le clic sur le bouton de déconnexion (masqué quand
        AUTH_ENABLED=false, mais on protège quand même). */
     if(e.target.closest('.sb-logout')) return;
+    /* La cloche ouvre SES notifications, pas le choix de profil : c'est le
+       geste attendu quand on voit un chiffre rouge. */
+    if(e.target.closest('#sb-bell')){ e.stopPropagation(); showNotifPanel(); return; }
     showUserPicker();
   });
 })();
@@ -3447,6 +3618,9 @@ loadProjectsFromSupabase().then(ok => {
   /* On met aussi à jour le compteur dans la sidebar */
   const nc = document.getElementById('nav-count-proj');
   if(nc) nc.textContent = PROJECTS.length;
+  /* Les commentaires arrivent avec les projets : la pastille ne peut compter
+     qu'une fois la base chargée. */
+  renderSidebarBadge();
 });
 /* Équipe : charge depuis Supabase (ou seed si table vide). Si l'user
    est sur la vue Équipe, on re-rend. On rafraîchit aussi la sidebar foot
@@ -3456,6 +3630,9 @@ loadTeamFromSupabase().then(ok => {
   /* Si déjà connecté par courriel, re-mappe au cas où les emails de la
      BD diffèrent légèrement des emails codés en dur. */
   teamLoaded = true;
+  /* L'équipe complète est là : le profil mémorisé peut enfin être reconnu.
+     Une vraie session courriel reste prioritaire, d'où l'ordre. */
+  loadCurrentUser();
   reconcileSession();
   renderSidebarFoot();
   const av = document.querySelector('.nav-item.active');

@@ -1249,6 +1249,71 @@ h1.title{
 .sb-logout:hover{background:var(--accent-soft);color:var(--accent-dark)}
 .sb-logout svg{width:16px;height:16px}
 
+/* Cloche des commentaires adressés, à côté du nom. Toujours là — c'est
+   l'endroit connu où l'on va voir ce qui nous attend. Le compteur rouge, lui,
+   n'apparaît que s'il y a quelque chose : c'est le seul point rouge de
+   l'interface, il ne peut pas se confondre avec un statut. */
+.sb-bell{
+  position:relative;margin-left:auto;flex-shrink:0;
+  background:none;border:none;cursor:pointer;
+  width:30px;height:30px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--ink-3);transition:background .12s,color .12s;
+}
+.sb-bell svg{width:17px;height:17px}
+.sb-bell:hover{background:var(--accent-soft);color:var(--accent-dark)}
+/* Cloche en attente : on peint le TRACÉ de l'icône, pas la couleur héritée —
+   le svg porte stroke="currentColor" et une règle CSS sur `stroke` prime sur
+   cet attribut de présentation. */
+.sb-bell.has-n{color:#c0392b}
+.sb-bell.has-n svg{stroke:#c0392b}
+.sb-bell-n{
+  position:absolute;top:-1px;right:-2px;
+  min-width:16px;height:16px;padding:0 4px;border-radius:8px;
+  background:#c0392b;color:#fff;font-family:inherit;font-size:10px;font-weight:700;
+  line-height:1;display:flex;align-items:center;justify-content:center;
+  border:2px solid var(--surface);
+}
+.sb-bell-n[hidden]{display:none}
+.sb-bell+.sb-logout{margin-left:2px}
+
+/* Panneau « Pour moi » — ouvert par la pastille, posé à droite de la sidebar */
+.notif-panel{
+  position:fixed;z-index:120;width:340px;max-height:62vh;overflow:auto;
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius-sm);box-shadow:0 14px 40px rgba(0,0,0,.18);
+}
+.notif-head{
+  display:flex;align-items:center;gap:8px;padding:11px 14px;
+  border-bottom:1px solid var(--line);
+  font-family:'Fraunces',serif;font-size:15px;font-weight:600;color:var(--ink);
+}
+.notif-n{
+  background:#c0392b;color:#fff;font-family:inherit;font-size:11px;font-weight:700;
+  min-width:19px;height:19px;padding:0 6px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+}
+.notif-body{padding:8px}
+.notif-item{display:flex;gap:10px;padding:10px;border-radius:8px}
+.notif-item+.notif-item{border-top:1px solid var(--line)}
+.notif-ava{
+  flex:0 0 auto;width:28px;height:28px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:11px;font-weight:700;
+}
+.notif-main{min-width:0;flex:1}
+.notif-meta{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.notif-who{font-size:13px;font-weight:700;color:var(--ink)}
+.notif-date{font-size:11px;color:var(--ink-3)}
+.notif-proj{font-size:11.5px;color:var(--accent-dark);font-weight:600;margin-top:1px}
+.notif-txt{font-size:13px;line-height:1.45;color:var(--ink-2);margin-top:5px;word-break:break-word}
+.notif-act{display:flex;gap:7px;margin-top:9px}
+
+/* Commentaire qui m'est adressé : liseré, pour le retrouver dans le fil */
+.msg-pourmoi .msg-bubble{border-left:3px solid #c0392b}
+.msg-lu{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:9px}
+.msg-lu-t{font-size:12px;color:#c0392b;font-weight:600}
+
 /* User picker — popover déroulant qui apparaît au-dessus de la sb-foot */
 .user-picker{
   position:fixed;
