@@ -1968,10 +1968,10 @@ function renderModalMain(p){
     const etats=L.folders.map(f=>folderDocsLiv(p,L.key,f));
     const toutARepartir=etats.every(e=>e.repartir) && etats.some(e=>e.docs.length);
     panel.innerHTML=modalTabsHtml(p)+livHeadHtml(p,actifs)+`
-      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;padding:10px 12px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-sm)">
+      <div class="liv-dates">
         <label class="md-field">Début <input type="date" id="lv-start" value="${esc(ld.start||'')}"></label>
         <label class="md-field">Fin <input type="date" id="lv-end" value="${esc(ld.end||'')}"></label>
-        <span style="font-size:11.5px;color:var(--ink-3);align-self:center">Dates spécifiques à ce livrable (utilisées sur le Calendrier).</span>
+        <span class="liv-dates-note">Dates spécifiques à ce livrable (utilisées sur le Calendrier).</span>
       </div>
       <div class="modal-section-title" style="font-size:14px;margin-top:6px">Documents mis en avant</div>
       <p style="font-size:12.5px;color:var(--ink-3);margin:-8px 0 12px">Les dossiers ci-dessous se remplissent tout seuls à partir des documents du projet. Cette liste sert à épingler ceux qui sont propres à ce livrable.</p>
