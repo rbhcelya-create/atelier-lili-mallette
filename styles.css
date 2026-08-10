@@ -1322,6 +1322,38 @@ h1.title{
 .notif-txt{font-size:13px;line-height:1.45;color:var(--ink-2);margin-top:5px;word-break:break-word}
 .notif-act{display:flex;gap:7px;margin-top:9px}
 
+/* Deux natures dans une cloche : ce qui m'est ADRESSÉ (et attend une réponse)
+   et ce que l'équipe a DÉPOSÉ (et informe seulement). Les intertitres le
+   disent, sinon les deux se confondraient en une seule pile. */
+.notif-sect{
+  display:flex;align-items:center;gap:7px;
+  padding:9px 10px 6px;margin-top:2px;
+  font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--ink-3);
+}
+.notif-sect:not(:first-child){border-top:1px solid var(--line);margin-top:8px;padding-top:12px}
+.notif-sect-n{
+  background:#c0392b;color:#fff;font-size:10px;font-weight:700;letter-spacing:0;
+  min-width:17px;height:17px;padding:0 5px;border-radius:9px;
+  display:inline-flex;align-items:center;justify-content:center;
+}
+/* Un dépôt ne demande rien : pas de point rouge devant le nom, seulement le
+   nom en gras tant qu'il est neuf. Le point est réservé à ce qui attend. */
+.notif-depot.nonlu .notif-who::before{display:none}
+.notif-depot:not(.nonlu){opacity:.62}
+.notif-depot:not(.nonlu):hover{opacity:1}
+.notif-depot .notif-txt strong{color:var(--ink);font-weight:700}
+.notif-det{margin-top:6px}
+.notif-det summary{
+  font-size:11.5px;color:var(--accent-dark);cursor:pointer;
+  list-style:none;display:inline-block;
+}
+.notif-det summary::-webkit-details-marker{display:none}
+.notif-det summary::before{content:'▸ ';font-size:10px}
+.notif-det[open] summary::before{content:'▾ '}
+.notif-det ul{margin:6px 0 0;padding-left:16px}
+.notif-det li{font-size:12px;line-height:1.5;color:var(--ink-2);word-break:break-word}
+
 /* Commentaire qui m'est adressé : liseré, pour le retrouver dans le fil */
 .msg-pourmoi .msg-bubble{border-left:3px solid #c0392b}
 .msg-lu{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:9px}

@@ -2158,18 +2158,126 @@ function dateCommentaireLongue(c){
   return 'Reçu le '+d.toLocaleDateString('fr-CA',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
     +' à '+d.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }
+/* ===== DÉPÔTS DE DOCUMENTS — la cloche annonce aussi le travail des autres
+   Quand quelqu'un dépose un document, les autres doivent l'apprendre sans
+   ouvrir les projets un par un. RIEN DE NOUVEAU N'EST ÉCRIT pour cela : une
+   ligne de `documents_client` porte DÉJÀ son auteur (initiales), son projet
+   et son heure de création. Le dépôt EST l'événement. Tenir un journal
+   d'événements à côté aurait ajouté une écriture qui peut échouer — et une
+   seconde vérité à garder d'accord avec la première.
+
+   DEUX NATURES DANS UNE SEULE CLOCHE, et c'est délibéré : un commentaire
+   ADRESSÉ attend une réponse, il garde son « J'ai lu » ; un dépôt INFORME
+   tout le monde, il est vu dès qu'on ouvre le panneau. Exiger un
+   acquittement par document aurait fait de la cloche une corvée (428
+   documents en base, des rafales de cinq en cinq minutes) — et une cloche
+   qu'on n'ouvre plus n'annonce plus les commentaires non plus. */
+
+/* Le « déjà vu » vit sur le poste, pas en base : ajouter une colonne à
+   team_members aurait demandé de passer du SQL en production pour une
+   information sans conséquence — au pire on revoit un dépôt en gras sur un
+   second ordinateur. L'accusé de lecture des commentaires, lui, reste en
+   base : il engage la personne. */
+const LS_DEPOTS_VUS='lili-mallette-depots-vus-v1';
+function depotsVusTable(){
+  try{ return JSON.parse(localStorage.getItem(LS_DEPOTS_VUS)||'{}')||{}; }catch(e){ return {}; }
+}
+/* Borne du « nouveau » pour cette personne. Première ouverture : on la pose à
+   MAINTENANT. Sans cela, les 428 documents déjà déposés seraient tous des
+   nouvelles le jour de la mise en ligne — même garde-fou que les commentaires
+   sans horodatage, qui sont tenus pour lus. */
+function depotsBorne(uid){
+  const t=depotsVusTable();
+  if(!t[uid]){
+    t[uid]=new Date().toISOString();
+    try{ localStorage.setItem(LS_DEPOTS_VUS, JSON.stringify(t)); }catch(e){}
+  }
+  return t[uid];
+}
+function marquerDepotsVus(uid){
+  const t=depotsVusTable();
+  t[uid]=new Date().toISOString();
+  try{ localStorage.setItem(LS_DEPOTS_VUS, JSON.stringify(t)); }catch(e){}
+}
+/* Les documents portent des INITIALES, l'équipe des identifiants. Personne
+   d'appariable (initiales vides, membre parti) : on garde les initiales
+   telles quelles plutôt que d'afficher « ? » — c'est déjà une information. */
+function membreParInitiales(ini){
+  const k=String(ini||'').trim().toUpperCase();
+  if(!k) return null;
+  return TEAM.find(m=>String(m.initiales||'').trim().toUpperCase()===k)||null;
+}
+/* Une rafale = même personne, même projet, moins d'une heure entre deux
+   dépôts. C'est une séance de travail, elle mérite UNE ligne : « Frédérick a
+   ajouté 12 documents dans Balado_CARI_01 ». Le détail se déplie. */
+const DEPOT_RAFALE_MS=60*60*1000;
+function depotsGroupes(uid,max){
+  const borne=depotsBorne(uid);
+  const src=DOCUMENTS_CLIENT
+    /* On n'annonce pas à quelqu'un ce qu'il vient lui-même de déposer. */
+    .filter(d=>d&&d.createdAt&&(function(){ const m=membreParInitiales(d.initiales); return !m||m.id!==uid; })())
+    .sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
+  const groupes=[];
+  src.forEach(d=>{
+    const t=new Date(d.createdAt).getTime();
+    const g=groupes[groupes.length-1];
+    const pid=d.projetId||'';
+    if(g && g.ini===d.initiales && g.projetId===pid && (g.tMin-t)<=DEPOT_RAFALE_MS){
+      g.docs.push(d); g.tMin=t; return;
+    }
+    groupes.push({ini:d.initiales,projetId:pid,docs:[d],at:d.createdAt,tMin:t});
+  });
+  groupes.forEach(g=>{ g.nouveau=String(g.at)>String(borne); });
+  /* Même règle que les commentaires : un groupe NOUVEAU n'est jamais écarté
+     par la limite, sinon la cloche annoncerait un chiffre que le panneau ne
+     justifie pas. Le plafond ne rogne que le rappel des déjà-vus. */
+  const plafond=max||HISTO_MAX;
+  const neufs=groupes.filter(g=>g.nouveau);
+  const vus=groupes.filter(g=>!g.nouveau).slice(0,Math.max(0,plafond-neufs.length));
+  return neufs.concat(vus);
+}
+function depotsNouveaux(uid){ return depotsGroupes(uid).filter(g=>g.nouveau).length; }
+/* Titre d'un groupe : le projet s'il existe encore. 28 documents pointent vers
+   un projet supprimé — on le dit au lieu de laisser un blanc. */
+function depotProjetTitre(g){
+  if(!g.projetId) return 'Sans projet';
+  const p=PROJECTS.find(x=>x.id===g.projetId);
+  return p?p.title:'Projet introuvable';
+}
+function dateDepot(at){
+  const d=new Date(at);
+  if(isNaN(d)) return '';
+  return dateCommentaire({at:at});
+}
+function dateDepotLongue(g){
+  const d=new Date(g.at);
+  if(isNaN(d)) return '';
+  const base='Déposé le '+d.toLocaleDateString('fr-CA',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
+    +' à '+d.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
+  if(g.docs.length<2) return base;
+  const fin=new Date(g.docs[g.docs.length-1].createdAt);
+  if(isNaN(fin)) return base;
+  return base+' (dernier de la série : '+fin.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'})+')';
+}
+
 /* La cloche reste TOUJOURS visible : c'est l'endroit où l'on va voir ce qui
    nous est adressé, même quand il n'y a rien. Seul le compteur rouge apparaît
-   et disparaît. */
+   et disparaît. Il additionne les deux natures — ce qui m'est adressé et ce
+   que l'équipe vient de déposer — parce qu'un seul chiffre à un seul endroit
+   est ce qu'on regarde ; l'infobulle, elle, les distingue. */
 function renderSidebarBadge(){
   const b=document.getElementById('sb-bell');
   if(!b) return;
-  const n=notificationsPour(currentUserId).length;
+  const nc=notificationsPour(currentUserId).length;
+  const nd=depotsNouveaux(currentUserId);
+  const n=nc+nd;
   const c=b.querySelector('.sb-bell-n');
   if(c){ c.hidden=!n; c.textContent=n>9?'9+':String(n); }
   b.classList.toggle('has-n',!!n);
-  b.title=n===0?'Aucun commentaire en attente'
-    :(n===1?'1 commentaire t\'est adressé':n+' commentaires te sont adressés');
+  const bouts=[];
+  if(nc) bouts.push(nc===1?'1 commentaire t\'est adressé':nc+' commentaires te sont adressés');
+  if(nd) bouts.push(nd===1?'1 dépôt de document':nd+' dépôts de documents');
+  b.title=bouts.length?bouts.join(' · '):'Rien de nouveau';
 }
 let notifCloser=null;
 function showNotifPanel(){
@@ -2202,12 +2310,45 @@ function showNotifPanel(){
       </div>
     </div>`;
   };
+  /* Dépôts de l'équipe : une ligne par séance de travail. Pas de bouton
+     « J'ai lu » — les ouvrir SUFFIT à les avoir vus (marquage plus bas). */
+  const depots=depotsGroupes(uid);
+  const neufsDepots=depots.filter(g=>g.nouveau).length;
+  const ligneDepot=(g,k)=>{
+    const m=membreParInitiales(g.ini);
+    const nom=m?m.name:(String(g.ini||'').trim()||'Quelqu’un');
+    const n=g.docs.length;
+    return `<div class="notif-item notif-depot${g.nouveau?' nonlu':''}">
+      <div class="notif-ava" style="background:${m?m.color:'#8C8270'}">${esc(m?initials(m.name):(String(g.ini||'?').slice(0,2)))}</div>
+      <div class="notif-main">
+        <div class="notif-meta"><span class="notif-who">${esc(nom)}</span><span class="notif-date" title="${esc(dateDepotLongue(g))}">${esc(dateDepot(g.at))}</span></div>
+        <div class="notif-proj">${esc(depotProjetTitre(g))}</div>
+        <div class="notif-txt">${n===1
+          ? 'a ajouté <strong>'+esc(g.docs[0].sujet||'un document')+'</strong>'
+          : 'a ajouté <strong>'+n+' documents</strong>'}</div>
+        ${n>1?`<details class="notif-det"><summary>Voir les ${n} documents</summary><ul>${
+          g.docs.map(d=>`<li>${esc(d.sujet||'—')}</li>`).join('')}</ul></details>`:''}
+        ${g.projetId&&PROJECTS.find(x=>x.id===g.projetId)
+          ? `<div class="notif-act"><button type="button" class="btn sm" data-depot-open="${k}">Ouvrir le projet</button></div>`
+          : ''}
+      </div>
+    </div>`;
+  };
+  const total=nonLus+neufsDepots;
   el.innerHTML=`
-    <div class="notif-head">Pour moi${nonLus?`<span class="notif-n">${nonLus}</span>`:''}</div>
-    <div class="notif-body">${ordre.length
-      ? ordre.map((n,k)=>ligne(n,k)).join('')
-        +(deja.length?'<div class="notif-foot">Historique des derniers commentaires qui t\'ont été adressés.</div>':'')
-      : '<div class="empty-note">Aucun commentaire pour l\'instant. Ceux qui te sont adressés apparaîtront ici, et y resteront une fois lus.</div>'}</div>`;
+    <div class="notif-head">Notifications${total?`<span class="notif-n">${total}</span>`:''}</div>
+    <div class="notif-body">
+      <div class="notif-sect">Pour moi${nonLus?` <span class="notif-sect-n">${nonLus}</span>`:''}</div>
+      ${ordre.length
+        ? ordre.map((n,k)=>ligne(n,k)).join('')
+          +(deja.length?'<div class="notif-foot">Historique des derniers commentaires qui t\'ont été adressés.</div>':'')
+        : '<div class="empty-note">Aucun commentaire pour l\'instant. Ceux qui te sont adressés apparaîtront ici, et y resteront une fois lus.</div>'}
+      <div class="notif-sect">Dépôts de l'équipe${neufsDepots?` <span class="notif-sect-n">${neufsDepots}</span>`:''}</div>
+      ${depots.length
+        ? depots.map((g,k)=>ligneDepot(g,k)).join('')
+          +'<div class="notif-foot">Les documents ajoutés par les autres. Ouvrir ce panneau suffit à les marquer comme vus.</div>'
+        : '<div class="empty-note">Aucun dépôt récent de l\'équipe.</div>'}
+    </div>`;
   document.body.appendChild(el);
   const foot=document.querySelector('.sb-foot');
   if(foot){
@@ -2228,6 +2369,17 @@ function showNotifPanel(){
     fermerNotifPanel();
     openProject(n.p.id);
   }));
+  el.querySelectorAll('[data-depot-open]').forEach(b=>b.addEventListener('click',ev=>{
+    ev.stopPropagation();
+    const g=depots[+b.dataset.depotOpen];
+    fermerNotifPanel();
+    openProject(g.projetId,null,null);
+  }));
+  /* Un dépôt est vu parce qu'on l'a sous les yeux : on avance la borne
+     MAINTENANT, mais l'affichage en cours garde son gras. On ne redessine pas
+     le panneau sous la souris — c'est au prochain coup d'œil qu'il sera
+     calme. Seul le compteur de la cloche retombe tout de suite. */
+  if(neufsDepots){ marquerDepotsVus(uid); renderSidebarBadge(); }
   /* Fermeture au clic à côté — écouteur retiré à la fermeture, jamais empilé. */
   notifCloser=ev=>{
     if(ev.target.closest('#notif-panel')||ev.target.closest('#sb-bell')) return;
@@ -2698,6 +2850,10 @@ async function loadCDocsFromSupabase(){
   }
   DOCUMENTS_CLIENT.length = 0;
   data.forEach(row => DOCUMENTS_CLIENT.push(cdocFromRow(row)));
+  /* Les dépôts de l'équipe se lisent dans cette table : la cloche ne peut
+     compter qu'une fois les documents chargés — et se remet à jour après
+     chaque ajout, qui repasse aussi par ici. */
+  renderSidebarBadge();
   return true;
 }
 
