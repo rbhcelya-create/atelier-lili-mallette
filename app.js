@@ -2105,6 +2105,26 @@ function notificationsPour(uid){
   }));
   return out.sort((a,b)=>String(b.c.at).localeCompare(String(a.c.at)));
 }
+/* Historique : les 10 derniers commentaires qui nous ont été adressés, LUS OU
+   NON. Acquitter n'efface plus rien de la vue — on peut retrouver ce qu'on
+   vient de marquer comme lu, et se rappeler ce qu'on nous a demandé la semaine
+   dernière. Seul le compteur de la cloche, lui, ne parle que des non-lus.
+
+   UN commentaire non lu n'est JAMAIS écarté par la limite : sinon la cloche
+   annoncerait 4 et le panneau n'en montrerait que 3, sans dire où est le
+   quatrième. La limite ne s'applique donc qu'au rappel des déjà-lus. */
+const HISTO_MAX=10;
+function historiquePour(uid,max){
+  const out=[];
+  PROJECTS.forEach(p=>(p.comments||[]).forEach((c,i)=>{
+    if(estAdresse(c,uid)&&c.at) out.push({p:p,c:c,i:i,nonLu:(c.lu||[]).indexOf(uid)<0});
+  }));
+  out.sort((a,b)=>String(b.c.at).localeCompare(String(a.c.at)));
+  const plafond=max||HISTO_MAX;
+  const enAttente=out.filter(n=>n.nonLu);
+  const deja=out.filter(n=>!n.nonLu).slice(0,Math.max(0,plafond-enAttente.length));
+  return enAttente.concat(deja);
+}
 function marquerLu(p,i,uid){
   const c=(p.comments||[])[i];
   if(!c) return;
@@ -2114,15 +2134,29 @@ function marquerLu(p,i,uid){
   renderSidebarBadge();
 }
 /* Date d'un commentaire : les nouveaux portent un vrai horodatage, les anciens
-   n'ont qu'un texte figé (« à l'instant », qui ne l'a jamais été). */
+   n'ont qu'un texte figé (« à l'instant », qui ne l'a jamais été).
+   L'HEURE est donnée dans tous les cas, y compris passé la veille : « le
+   14 juillet » ne dit pas si le message est arrivé avant ou après une réunion
+   du midi. L'année n'apparaît que si elle n'est pas l'année courante. */
+function heureDe(d){ return d.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'}); }
 function dateCommentaire(c){
   if(!c.at) return c.date||'';
   const d=new Date(c.at);
   if(isNaN(d)) return c.date||'';
   const j=Math.floor((Date.now()-d.getTime())/86400000);
-  if(j<=0) return 'aujourd\'hui, '+d.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
-  if(j===1) return 'hier, '+d.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
-  return d.toLocaleDateString('fr-CA',{day:'numeric',month:'long'});
+  if(j<=0) return 'aujourd\'hui, '+heureDe(d);
+  if(j===1) return 'hier, '+heureDe(d);
+  const opts={day:'numeric',month:'long'};
+  if(d.getFullYear()!==new Date().getFullYear()) opts.year='numeric';
+  return d.toLocaleDateString('fr-CA',opts)+', '+heureDe(d);
+}
+/* Horodatage complet, pour l'infobulle : la seconde près, sans ambiguïté. */
+function dateCommentaireLongue(c){
+  if(!c.at) return 'Date non enregistrée (commentaire antérieur à l\'horodatage)';
+  const d=new Date(c.at);
+  if(isNaN(d)) return '';
+  return 'Reçu le '+d.toLocaleDateString('fr-CA',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
+    +' à '+d.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }
 /* La cloche reste TOUJOURS visible : c'est l'endroit où l'on va voir ce qui
    nous est adressé, même quand il n'y a rien. Seul le compteur rouge apparaît
@@ -2142,26 +2176,38 @@ function showNotifPanel(){
   const old=document.getElementById('notif-panel');
   if(old){ fermerNotifPanel(); return; }
   const uid=currentUserId;
-  const list=notificationsPour(uid);
+  const list=historiquePour(uid);
+  const nonLus=list.filter(n=>n.nonLu).length;
   const el=document.createElement('div');
   el.id='notif-panel'; el.className='notif-panel';
-  el.innerHTML=`
-    <div class="notif-head">Pour moi<span class="notif-n">${list.length}</span></div>
-    <div class="notif-body">${list.length?list.map((n,k)=>{
-      const m=memberById(n.c.who);
-      return `<div class="notif-item" data-k="${k}">
-        <div class="notif-ava" style="background:${m?m.color:'#999'}">${esc(m?initials(m.name):'?')}</div>
-        <div class="notif-main">
-          <div class="notif-meta"><span class="notif-who">${esc(m?m.name:n.c.who)}</span><span class="notif-date">${esc(dateCommentaire(n.c))}</span></div>
-          <div class="notif-proj">${esc(n.p.title)}</div>
-          <div class="notif-txt">${esc(n.c.text)}</div>
-          <div class="notif-act">
-            <button type="button" class="btn sm" data-notif-open="${k}">Ouvrir le projet</button>
-            <button type="button" class="btn sm primary" data-notif-lu="${k}">J'ai lu</button>
-          </div>
+  /* Les non-lus d'abord, sinon un acquittement ferait « sauter » la ligne au
+     milieu de la liste sous le doigt de la personne. À l'intérieur de chaque
+     groupe, du plus récent au plus ancien. */
+  const enAttente=list.filter(n=>n.nonLu), deja=list.filter(n=>!n.nonLu);
+  const ordre=enAttente.concat(deja);
+  const ligne=(n,k)=>{
+    const m=memberById(n.c.who);
+    return `<div class="notif-item${n.nonLu?' nonlu':''}">
+      <div class="notif-ava" style="background:${m?m.color:'#999'}">${esc(m?initials(m.name):'?')}</div>
+      <div class="notif-main">
+        <div class="notif-meta"><span class="notif-who">${esc(m?m.name:n.c.who)}</span><span class="notif-date" title="${esc(dateCommentaireLongue(n.c))}">${esc(dateCommentaire(n.c))}</span></div>
+        <div class="notif-proj">${esc(n.p.title)}</div>
+        <div class="notif-txt">${esc(n.c.text)}</div>
+        <div class="notif-act">
+          <button type="button" class="btn sm" data-notif-open="${k}">Ouvrir le projet</button>
+          ${n.nonLu
+            ? `<button type="button" class="btn sm primary" data-notif-lu="${k}">J'ai lu</button>`
+            : '<span class="notif-deja">Lu</span>'}
         </div>
-      </div>`;
-    }).join(''):'<div class="empty-note">Aucun commentaire en attente. Ceux qui te sont adressés apparaîtront ici.</div>'}</div>`;
+      </div>
+    </div>`;
+  };
+  el.innerHTML=`
+    <div class="notif-head">Pour moi${nonLus?`<span class="notif-n">${nonLus}</span>`:''}</div>
+    <div class="notif-body">${ordre.length
+      ? ordre.map((n,k)=>ligne(n,k)).join('')
+        +(deja.length?'<div class="notif-foot">Historique des derniers commentaires qui t\'ont été adressés.</div>':'')
+      : '<div class="empty-note">Aucun commentaire pour l\'instant. Ceux qui te sont adressés apparaîtront ici, et y resteront une fois lus.</div>'}</div>`;
   document.body.appendChild(el);
   const foot=document.querySelector('.sb-foot');
   if(foot){
@@ -2171,14 +2217,14 @@ function showNotifPanel(){
   }
   el.querySelectorAll('[data-notif-lu]').forEach(b=>b.addEventListener('click',ev=>{
     ev.stopPropagation();
-    const n=list[+b.dataset.notifLu];
+    const n=ordre[+b.dataset.notifLu];
     marquerLu(n.p,n.i,uid);
     fermerNotifPanel(); showNotifPanel();
     toast('Commentaire marqué comme lu');
   }));
   el.querySelectorAll('[data-notif-open]').forEach(b=>b.addEventListener('click',ev=>{
     ev.stopPropagation();
-    const n=list[+b.dataset.notifOpen];
+    const n=ordre[+b.dataset.notifOpen];
     fermerNotifPanel();
     openProject(n.p.id);
   }));
@@ -2232,7 +2278,7 @@ function renderCommentsSection(p){
       return `<div class="msg${pourMoi?' msg-pourmoi':''}">
         <div class="msg-ava" style="background:${m.color}">${initials(m.name)}</div>
         <div class="msg-bubble">
-          <div class="msg-meta"><span class="mm-name">${esc(m.name)}</span>${to?`<span class="mm-to">→ ${esc(to.name)}</span>`:''}<span class="mm-date">${esc(dateCommentaire(c))}</span></div>
+          <div class="msg-meta"><span class="mm-name">${esc(m.name)}</span>${to?`<span class="mm-to">→ ${esc(to.name)}</span>`:''}<span class="mm-date" title="${esc(dateCommentaireLongue(c))}">${esc(dateCommentaire(c))}</span></div>
           <div class="msg-text">${esc(c.text)}</div>
           ${nonLu?`<div class="msg-lu"><span class="msg-lu-t">Ce commentaire t'est adressé.</span><button type="button" class="btn sm primary" data-cmtlu="${i}">J'ai lu</button></div>`:''}
         </div>

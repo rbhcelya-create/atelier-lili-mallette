@@ -1296,6 +1296,19 @@ h1.title{
 .notif-body{padding:8px}
 .notif-item{display:flex;gap:10px;padding:10px;border-radius:8px}
 .notif-item+.notif-item{border-top:1px solid var(--line)}
+/* Déjà lu : présent dans l'historique, mais visiblement en retrait — ce qui
+   attend une réponse doit rester ce qui saute aux yeux. */
+.notif-item:not(.nonlu){opacity:.62}
+.notif-item:not(.nonlu):hover{opacity:1}
+.notif-item.nonlu .notif-who::before{
+  content:'';display:inline-block;width:6px;height:6px;border-radius:50%;
+  background:#c0392b;margin-right:6px;vertical-align:middle;
+}
+.notif-deja{font-size:11.5px;color:var(--ink-3);align-self:center}
+.notif-foot{
+  padding:9px 10px 4px;border-top:1px solid var(--line);margin-top:4px;
+  font-size:11.5px;color:var(--ink-3);text-align:center;
+}
 .notif-ava{
   flex:0 0 auto;width:28px;height:28px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
